@@ -1,4 +1,5 @@
-const { connectDB, client } = require('../lib/mongodb');
+const { connectDB } = require('../lib/mongodb');
+const embeddingService = require('../lib/embeddings');
 
 const blogPosts = [
   {
@@ -84,22 +85,39 @@ const blogPosts = [
 ];
 
 async function seedDatabase() {
+  const connection = await connectDB();
+  
   try {
-    await connectDB();
-    const db = client.db('tangerine');
+    const db = await connection.getDatabase();
     const blogCollection = db.collection('blogposts');
+    const embeddingsCollection = db.collection('blog_embeddings');
 
-    // Clear existing posts
+    // Clear existing data
     await blogCollection.deleteMany({});
+    await embeddingsCollection.deleteMany({});
 
-    // Insert new posts
-    const result = await blogCollection.insertMany(blogPosts);
-    
-    console.log(`${result.insertedCount} blog posts were inserted`);
+    // Insert new posts with embeddings
+    for (const post of blogPosts) {
+      // Insert blog post
+      const result = await blogCollection.insertOne(post);
+      
+      // Generate embedding for post content
+      const embedding = await embeddingService.generateEmbedding(post.content);
+      
+      // Store embedding with reference to post
+      await embeddingsCollection.insertOne({
+        postId: result.insertedId,
+        embedding: embedding,
+        title: post.title,
+        content: post.content
+      });
+    }
+
+    console.log(`${blogPosts.length} blog posts and embeddings were inserted`);
   } catch (error) {
     console.error('Error seeding database:', error);
   } finally {
-    await client.close();
+    await connection.close();
   }
 }
 

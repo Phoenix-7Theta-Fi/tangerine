@@ -1,6 +1,44 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { connectDB } from '../../../lib/mongodb';
-import DOMPurify from 'dompurify';
+import DOMPurify from 'isomorphic-dompurify';
+
+// Function to add inline citations only
+function addInTextCitations(response, sources) {
+  let citedResponse = response;
+  
+  // Create a map of source titles to their citation numbers
+  const sourceNumbers = new Map();
+  sources.forEach((source, index) => {
+    sourceNumbers.set(source.title, index + 1);
+  });
+
+  // Remove any existing citations first
+  citedResponse = citedResponse.replace(/\[Source: [^\]]+\]/g, '');
+
+  // Track which sources have been cited
+  const citedSources = new Set();
+
+  // Add citations for each source
+  sources.forEach(source => {
+    const citationNumber = sourceNumbers.get(source.title);
+    const citation = ` [${citationNumber}]`;
+    
+    // Split response into paragraphs for better citation placement
+    const paragraphs = citedResponse.split('\n\n');
+    paragraphs.forEach((paragraph, index) => {
+      // Check if paragraph contains relevant keywords
+      const keywords = source.title.split(' ').slice(0, 3);
+      if (keywords.some(keyword => paragraph.toLowerCase().includes(keyword.toLowerCase()))) {
+        // Add citation after relevant paragraph
+        paragraphs[index] = `${paragraph}${citation}`;
+        citedSources.add(source.title);
+      }
+    });
+    citedResponse = paragraphs.join('\n\n');
+  });
+
+  return citedResponse;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -22,17 +60,19 @@ export default async function handler(req, res) {
     const db = await connection.getDatabase();
     const embeddingsCollection = db.collection('blog_embeddings');
 
+    // Generate embedding for the query
     const queryEmbedding = await genAI.getGenerativeModel({ model: 'embedding-001' })
       .embedContent(message);
 
+    // Enhanced vector search pipeline
     const pipeline = [
       {
-        $search: {
-          knnBeta: {
-            vector: queryEmbedding.embedding.values,
-            path: "embedding",
-            k: 3
-          }
+        $vectorSearch: {
+          index: 'vector_index',
+          path: 'embedding',
+          queryVector: queryEmbedding.embedding.values,
+          numCandidates: 100,
+          limit: 3
         }
       },
       {
@@ -49,42 +89,59 @@ export default async function handler(req, res) {
       {
         $project: {
           _id: 0,
-          score: { $meta: "searchScore" },
+          postId: '$blogPost._id',
+          score: { $meta: 'vectorSearchScore' },
           title: '$blogPost.title',
           content: '$blogPost.content'
         }
       }
     ];
 
+    console.log('Executing vector search pipeline...');
     const relevantDocs = await embeddingsCollection.aggregate(pipeline).toArray();
+    console.log('Found relevant documents:', relevantDocs);
 
-    // Prepare context from relevant posts
-    const context = relevantDocs.map(doc => 
-      `Source: ${doc.title}
-       Relevance Score: ${doc.score.toFixed(2)}
-       Excerpt: ${doc.content.slice(0, 500)}...`
-    ).join('\n\n');
+    // Prepare enhanced context with source details
+    const sourceContext = relevantDocs.map((doc, index) => `
+      [Source ${index + 1}: ${doc.title} - Relevance: ${doc.score.toFixed(2)}]
+      Key Excerpt: ${doc.content.slice(0, 300)}...
+    `).join('\n\n');
 
-    // Construct prompt with context
+    // Construct enhanced prompt with explicit citation restrictions
     const prompt = `
-    You are an Ayurvedic wellness AI assistant. 
-    Use the following context to provide a detailed, accurate response to the user's query.
-    If the context is relevant, cite the sources. If not, provide a general Ayurvedic perspective.
+    ADVANCED RESPONSE GUIDELINES:
 
-    Context:
-    ${context}
+    1. Role: You are an Ayurvedic wellness AI assistant
 
-    User Query: ${message}
+    2. Citation Rules:
+       - ONLY use citations from the provided sources below
+       - NEVER cite sources not listed below
+       - Format citations as [Number]
+       - Include specific section/page references when possible
+       - Be precise about which part of the source supports your statement
 
-    Guidelines:
-    - Provide a comprehensive and informative response
-    - Cite sources when possible
-    - Maintain a helpful and compassionate tone
+    3. Available Sources:
+    ${sourceContext}
+
+    4. Response Composition Rules:
+       - Start with a concise direct answer
+       - Provide detailed explanation
+       - Explicitly link statements to source materials
+       - If no direct source matches, clearly state general Ayurvedic principle
+       - NEVER make up or invent sources
+
+    5. User Query Context:
+       Query: ${message}
+
+    GENERATE RESPONSE NOW:
     `;
 
     // Generate AI response
     const result = await responseModel.generateContent(prompt);
-    const responseText = result.response.text();
+    let responseText = result.response.text();
+
+    // Add inline citations through post-processing
+    responseText = addInTextCitations(responseText, relevantDocs);
 
     // Sanitize the response to prevent XSS
     const sanitizedResponse = DOMPurify.sanitize(responseText);
@@ -93,8 +150,10 @@ export default async function handler(req, res) {
     const responseWithSources = {
       message: sanitizedResponse,
       sources: relevantDocs.map(doc => ({
+        id: doc.postId.toString(),
         title: doc.title,
-        relevanceScore: doc.score
+        relevanceScore: doc.score,
+        excerpt: doc.content.slice(0, 200)
       })),
       timestamp: new Date().toISOString()
     };
