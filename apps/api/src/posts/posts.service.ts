@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { TimelineService } from '../timeline/timeline.service';
+import { OutboxService, POST_CREATED } from '../outbox/outbox.service';
 import { decodeCursor, encodeCursor } from '../common/cursor';
 import { Page } from '../common/dto/pagination.dto';
 
@@ -41,7 +41,7 @@ export interface PostDto {
 export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly timeline: TimelineService,
+    private readonly outbox: OutboxService,
   ) {}
 
   async create(params: {
@@ -49,23 +49,25 @@ export class PostsService {
     body: string;
     mediaUrl?: string;
   }): Promise<PostDto> {
-    const post = await this.prisma.post.create({
-      data: {
-        authorId: params.authorId,
-        body: params.body,
-        mediaUrl: params.mediaUrl,
-      },
-      include: POST_INCLUDE,
-    });
-
-    // Write-time fan-out. Kept synchronous here for clarity; in production this
-    // is a transactional-outbox row consumed by a fan-out worker so the post
-    // write never blocks on follower count.
-    await this.timeline.fanoutPost({
-      id: post.id,
-      authorId: post.authorId,
-      createdAt: post.createdAt,
-      authorIsCelebrity: post.author.isCelebrity,
+    // The post and its fan-out intent commit atomically. The request returns
+    // without touching follower timelines: fan-out is unbounded in follower
+    // count and must not sit in the write path. A relay + worker do it after.
+    const post = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.post.create({
+        data: {
+          authorId: params.authorId,
+          body: params.body,
+          mediaUrl: params.mediaUrl,
+        },
+        include: POST_INCLUDE,
+      });
+      await this.outbox.emit(tx, POST_CREATED, {
+        postId: created.id,
+        authorId: created.authorId,
+        createdAt: created.createdAt.toISOString(),
+        authorIsCelebrity: created.author.isCelebrity,
+      });
+      return created;
     });
 
     return this.serialize(post, params.authorId);

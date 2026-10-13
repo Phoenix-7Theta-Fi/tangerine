@@ -3,6 +3,9 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { QueueModule } from './queue/queue.module';
+import { OutboxModule } from './outbox/outbox.module';
+import { FanoutModule } from './fanout/fanout.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { UsersModule } from './users/users.module';
@@ -10,6 +13,7 @@ import { FollowModule } from './follow/follow.module';
 import { PostsModule } from './posts/posts.module';
 import { FeedModule } from './feed/feed.module';
 import { ChatModule } from './chat/chat.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -17,6 +21,9 @@ import { HealthModule } from './health/health.module';
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     PrismaModule,
     RedisModule,
+    QueueModule,
+    OutboxModule,
+    FanoutModule,
     RealtimeModule,
     TimelineModule,
     UsersModule,
@@ -24,6 +31,7 @@ import { HealthModule } from './health/health.module';
     PostsModule,
     FeedModule,
     ChatModule,
+    MetricsModule,
     HealthModule,
   ],
 })

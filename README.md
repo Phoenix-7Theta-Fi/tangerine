@@ -89,6 +89,27 @@ Try it: the seed flags two practitioners as celebrities. Post as one of them and
 watch the post appear in a follower's feed via the *pull* path (the timeline
 cache never receives it).
 
+### Async fan-out — transactional outbox + worker
+
+Fan-out is unbounded in follower count, so it must never sit in the request path.
+Rather than the classic dual-write bug (write the post, *then* enqueue — and lose
+the enqueue if the process dies), the post and its fan-out intent commit **in one
+transaction**:
+
+1. `POST /posts` writes the `Post` **and** an `OutboxEvent` in the same Prisma
+   transaction, then returns. It never touches follower timelines.
+2. An **outbox relay** polls pending rows and publishes them to a **BullMQ**
+   queue. It claims rows with `FOR UPDATE SKIP LOCKED`, so any number of API
+   instances relay concurrently with no coordination, and `jobId = eventId`
+   makes publishing idempotent across crashes.
+3. A **BullMQ worker** performs the fan-out with exponential-backoff retries.
+   Fan-out is idempotent by construction (a timeline is a sorted set keyed by post
+   id), so at-least-once delivery is safe. After the final attempt the event is
+   marked `FAILED` — a durable dead-letter row, not a lost job.
+
+`GET /api/metrics` exposes the two numbers you actually alert on: **outbox lag**
+(age of the oldest pending event) and **queue depth** by state.
+
 ### Chat — ordering and idempotency are the server's job
 
 - **Server-assigned sequence.** Each conversation has a monotonic `lastSeq`,
@@ -133,6 +154,7 @@ Full, interactive docs at `http://localhost:3001/docs`.
 | Posts   | `POST /posts`, `GET/DELETE /posts/:id`, `POST/DELETE /posts/:id/like`, `GET/POST /posts/:id/comments`, `GET /users/:id/posts` |
 | Feed    | `GET /feed?limit&cursor`                                                   |
 | Chat    | `GET /conversations`, `POST /conversations/direct`, `GET/POST /conversations/:id/messages`, `POST /conversations/:id/read` |
+| Ops     | `GET /metrics` (Prometheus: outbox lag, queue depth), `GET /health`        |
 
 ### Socket events
 
@@ -178,6 +200,10 @@ tangerine/
 │  │  ├─ src/
 │  │  │  ├─ feed/          # hybrid fan-out read path
 │  │  │  ├─ timeline/      # Redis materialized timelines
+│  │  │  ├─ outbox/        # transactional outbox + relay
+│  │  │  ├─ fanout/        # BullMQ worker (async fan-out)
+│  │  │  ├─ queue/         # BullMQ connection/queue wiring
+│  │  │  ├─ metrics/       # Prometheus exposition
 │  │  │  ├─ posts/ users/ follow/
 │  │  │  ├─ chat/          # service, gateway, REST
 │  │  │  ├─ realtime/      # socket server handle + presence
@@ -204,9 +230,6 @@ hidden:
 
 ## Where this would go next
 
-- Transactional outbox + a worker for fan-out, so post writes never block on
-  follower count (the current fan-out is synchronous for clarity).
-- `Snowflake` ids so id ordering equals time ordering.
-- Redis rate limiting, OpenTelemetry tracing, and a CI pipeline (build + test +
-  migrate) — the natural next portfolio increment.
+- Rate limiting + idempotency keys at the API edge; a CI pipeline that runs the
+  full build + test + migrate flow on every push.
 - Group chat fan-out and message search.

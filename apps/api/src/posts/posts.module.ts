@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { TimelineModule } from '../timeline/timeline.module';
+import { OutboxModule } from '../outbox/outbox.module';
 import { PostsController } from './posts.controller';
 import { AuthorPostsController } from './author-posts.controller';
 import { PostsService } from './posts.service';
 
 @Module({
-  imports: [TimelineModule],
+  imports: [OutboxModule],
   controllers: [PostsController, AuthorPostsController],
   providers: [PostsService],
   exports: [PostsService],

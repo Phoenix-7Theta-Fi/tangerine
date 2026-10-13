@@ -7,6 +7,10 @@ export interface AppConfig {
   celebrityFollowerThreshold: number;
   /** Max post ids retained per user's materialized home timeline. */
   timelineMaxLength: number;
+  /** How often the outbox relay polls for pending events, in ms. */
+  outboxRelayIntervalMs: number;
+  /** Max outbox events relayed per poll tick. */
+  outboxRelayBatchSize: number;
 }
 
 export default (): AppConfig => ({
@@ -19,4 +23,9 @@ export default (): AppConfig => ({
     10,
   ),
   timelineMaxLength: parseInt(process.env.TIMELINE_MAX_LENGTH ?? '800', 10),
+  outboxRelayIntervalMs: parseInt(
+    process.env.OUTBOX_RELAY_INTERVAL_MS ?? '500',
+    10,
+  ),
+  outboxRelayBatchSize: parseInt(process.env.OUTBOX_RELAY_BATCH_SIZE ?? '200', 10),
 });

@@ -38,6 +38,18 @@ enum MessageType {
   SYSTEM
 }
 
+/// Lifecycle of a transactional-outbox event.
+///   PENDING   -> written in the same tx as the domain change, not yet published
+///   RELAYED   -> published onto the work queue
+///   PROCESSED -> the worker finished it
+///   FAILED    -> exhausted retries (surfaced for alerting/replay)
+enum OutboxStatus {
+  PENDING
+  RELAYED
+  PROCESSED
+  FAILED
+}
+
 model User {
   id           String   @id @default(cuid())
   handle       String   @unique
@@ -177,4 +189,29 @@ model Message {
   @@unique([conversationId, seq])
   @@unique([senderId, clientMsgId])
   @@index([conversationId, createdAt(sort: Desc)])
+}
+
+/// Transactional outbox.
+///
+/// A domain write (e.g. creating a post) and the intent to do follow-up work
+/// (fan the post out to followers) are committed in ONE transaction. A separate
+/// relay publishes pending rows to a work queue. This removes the classic
+/// dual-write problem: we never commit a post and then fail to enqueue its
+/// fan-out, and we never enqueue fan-out for a post that rolled back.
+///
+/// The relay claims rows with `FOR UPDATE SKIP LOCKED`, so many API instances can
+/// relay concurrently without stepping on each other.
+model OutboxEvent {
+  id          String       @id @default(cuid())
+  type        String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?
+  createdAt   DateTime     @default(now())
+  availableAt DateTime     @default(now())
+  relayedAt   DateTime?
+  processedAt DateTime?
+
+  @@index([status, availableAt])
 }

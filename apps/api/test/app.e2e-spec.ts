@@ -8,6 +8,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { RedisService } from '../src/redis/redis.service';
 
 /**
  * End-to-end flow against real Postgres + Redis (see docker-compose.yml).
@@ -87,7 +88,13 @@ describe('Tangerine API (e2e)', () => {
     }
   });
 
-  it('creates a post and fans it out to a follower feed', async () => {
+  it('creates a post and fans it out to a follower feed (async)', async () => {
+    // Deterministic: make userB a non-celebrity so the post takes the *push*
+    // path rather than the read-time celebrity pull.
+    await prisma.user.update({
+      where: { id: userB },
+      data: { isCelebrity: false },
+    });
     // userA follows userB.
     await prisma.follow.upsert({
       where: { followerId_followingId: { followerId: userA, followingId: userB } },
@@ -102,14 +109,25 @@ describe('Tangerine API (e2e)', () => {
       .expect(201);
     expect(created.body.id).toBeDefined();
 
-    const feed = await request(app.getHttpServer())
-      .get('/api/feed?limit=50')
-      .set('x-user-id', userA)
-      .expect(200);
-    const found = feed.body.items.find(
-      (i: { id: string }) => i.id === created.body.id,
-    );
-    expect(found).toBeDefined();
+    // The write returns before fan-out. Assert the outbox event exists and is
+    // eventually processed, and that the post lands in userA's Redis timeline.
+    const redis = app.get(RedisService);
+    const deadline = Date.now() + 8000;
+    let inTimeline = null as string | null;
+    while (Date.now() < deadline) {
+      inTimeline = await redis.client.zscore(
+        `timeline:${userA}`,
+        created.body.id,
+      );
+      if (inTimeline) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    expect(inTimeline).not.toBeNull();
+
+    const processed = await prisma.outboxEvent.findFirst({
+      where: { payload: { path: ['postId'], equals: created.body.id } },
+    });
+    expect(['RELAYED', 'PROCESSED']).toContain(processed?.status);
   });
 
   it('sends and lists chat messages', async () => {
