@@ -1,0 +1,107 @@
+{
+  "generated_for": "tangerine tech stack rethink, Oct 2026 market intel",
+  "context_sources": [
+    "https://www.seekerscore.com/insights/backend-engineer-market-2026",
+    "https://www.nextgencodingcompany.com/best-backend-framework-2026",
+    "https://dev.to/thebitforge/the-complete-full-stack-developer-roadmap-for-2026-2i0j",
+    "https://survey.stackoverflow.co/2026",
+    "https://www.jobschat.ai/ai-resume/senior-backend-engineer",
+    "https://www.ziprecruiter.com/Jobs/Prisma-React-Js",
+    "https://dev.to/pockit_tools/drizzle-orm-vs-prisma-in-2026-the-honest-comparison-nobody-is-making-3n6g",
+    "https://www.aviator.co/blog/monorepo-tools/",
+    "https://daily.dev/blog/monorepo-turborepo-vs-nx-vs-bazel-modern-development-teams/",
+    "https://hyperskill.org/blog/post/building-a-developer-portfolio-in-2026-what-actually-gets-attention"
+  ],
+  "ats_keywords": {
+    "senior_full_stack": ["TypeScript", "React", "Next.js", "Node.js", "PostgreSQL", "Redis", "REST/GraphQL", "tRPC", "Drizzle", "Prisma", "Turborepo", "Nx", "Docker", "Kubernetes", "AWS", "CI/CD", "OpenTelemetry"],
+    "senior_backend": ["Java", "Python", "Go", "FastAPI", "NestJS", "Spring Boot", ".NET", "PostgreSQL", "Redis", "Kafka", "Docker", "Kubernetes", "AWS", "Terraform", "gRPC", "microservices", "distributed systems", "observability"]
+  },
+  "stack_comparison": [
+    {
+      "stack": "Node/TypeScript + React/Next.js",
+      "demand": "highest for full-stack roles; 75.9% of front-end jobs use React (Seeker primary dataset cited via StackOverflow-adjacent market data)",
+      "pros": ["one language across stack", "deep hiring pool", "NestJS adds structure/DI/testing", "fast iteration", "tRPC+Drizzle fit naturally"],
+      "cons": ["CPU-bound work weak", "Node single-thread limits for heavy compute", "risk of under-designed architecture in fast-moving teams"],
+      "verdict": "best default for product velocity and hiring"
+    },
+    {
+      "stack": "Python (FastAPI/Django) + React",
+      "demand": "strong for AI/data products; FastAPI praised for AI/ML core work",
+      "pros": ["native integration with ML/data libs", "Pydantic validation/OpenAPI", "FastAPI async ASGI production-ready"],
+      "cons": ["senior Python hiring slower than TS in most U.S. markets", "two languages in stack", "Django hiring pipeline thinning"],
+      "verdict": "use as AI/data surface, not whole product"
+    },
+    {
+      "stack": "Go/Rust backend",
+      "demand": "Go concentrated in infra/platform/fintech and pays above the $145-185k band; Rust niche, systems/perf",
+      "pros": ["high throughput, low latency, small binaries, predictable concurrency", "great for gateways and edge APIs"],
+      "cons": ["weak for CRUD-heavy business apps; staffing tax if overused", "right tool for 2-3 services only"],
+      "verdict": "reserve for throughput-bound services"
+    },
+    {
+      "stack": "tRPC",
+      "demand": "common in T3-style full-stack TS apps and startups; appears in job listings for TS product teams",
+      "pros": ["end-to-end type safety", "no schema drift", "great DX with React Query"],
+      "cons": ["TS-only, not for polyglot/public APIs", "can encourage tight coupling if no API boundary strategy"],
+      "verdict": "use internally for TS apps, keep REST/OpenAPI for external/public APIs"
+    },
+    {
+      "stack": "Drizzle vs Prisma",
+      "demand": "both listed; Prisma more common; Drizzle growing on performance/bundle-size grounds",
+      "pros_drizzle": ["faster cold starts and queries", "smaller bundles", "SQL control"],
+      "pros_prisma": ["developer experience, Prisma Studio, docs, migrations"],
+      "cons": ["Drizzle steeper SQL learning curve; Prisma heavier runtime/binary size"],
+      "verdict": "Drizzle for latency/cost-sensitive and edge; Prisma for DX-first teams"
+    },
+    {
+      "stack": "Postgres + Redis + Kafka",
+      "demand": "core senior-backend data triad; Seeker: combined Postgres/Redis/Kafka + cloud + K8s appears in 40% of senior backend requirements",
+      "postgres": "universal default; use RLS for multi-tenant health data",
+      "redis": "caching, sessions, rate limits, queues",
+      "kafka": "event streaming for scale; overkill before product-market fit; adopt incrementally",
+      "verdict": "Postgres day one; Redis early; Kafka only after event volume justification"
+    },
+    {
+      "stack": "Kubernetes",
+      "demand": "ATS keyword; appears in senior backend role combos; cloud platform overall in 72% listings",
+      "pros": ["standardized deploy model", "autoscaling, resilience"],
+      "cons": ["operational complexity; managed offerings preferred for small teams"],
+      "verdict": "use managed K8s after team/platform maturity; Docker + managed cloud earlier"
+    },
+    {
+      "stack": "Monorepos (Turborepo/Nx)",
+      "demand": "strong for multi-app products; Nx/Turborepo appear in job listings for full-stack lead roles",
+      "turborepo": "simpler, fast JS/TS fit, low config",
+      "nx": "powerful graph, better for large multi-team/multi-language repos",
+      "verdict": "Turborepo for tangerine MVP-scale; migrate to Nx/Bazel if >5 apps/teams"
+    }
+  ],
+  "hiring_intel": {
+    "senior_backend_market": "58% of backend roles require 5+ years; 24,600+ active backend roles; avg listed salary $145-185k US; AWS in 55% of listings; cloud overall 72%; top candidates combine primary language + cloud + Docker/K8s + Postgres/Redis/Kafka (40% of senior requirements)",
+    "full_stack_roadmap": "TypeScript won as lingua franca; fundamentals (HTTP, algorithms) matter; T-shaped engineers preferred; over-broad job descriptions are red flags",
+    "framework_choice": "NestJS default for TS product teams; FastAPI if AI/data core; Spring Boot/.NET for health/finance enterprise with platform teams; Go for latency-bound services; Django/Rails fastest CRUD but slower senior hiring",
+    "github_portfolio": "hiring managers value depth over breadth: 2-4 polished projects with clear READMEs, architecture decisions, tests, CI/CD, deployment, and measurable impact; toy apps without context do not convert"
+  },
+  "tangerine_recommendation": {
+    "rationale": "Tangerine is health-data-heavy and regulated (consents, audit logs, credential verification, FHIR-lite later). Hiring appeal plus compliance favors a TS full-stack core for velocity and hiring pool, with Python AI/data services for biomarker interpretation, reserving Go for throughput-bound gateway services.",
+    "recommended_stack": {
+      "frontend": "Next.js 15 + React 19 + TypeScript (App Router)",
+      "backend_core": "NestJS (TypeScript) modular monolith initially, extracted services later",
+      "ai_data_service": "FastAPI (Python) for biomarker/AI interpretation and data pipelines",
+      "database": "PostgreSQL with row-level security and pgvector (embeddings for AI search)",
+      "cache_queues": "Redis (Upstash/ElastiCache) for sessions, rate limits, job queues; BullMQ",
+      "events": "Kafka (or managed event bus) only from Phase 5+ at event-volume justification; start with transactional outbox + Redis streams",
+      "orm": "Drizzle (performance, type-safety, small bundles) with strong migration discipline",
+      "api_layer": "tRPC for internal app-to-backend; REST/OpenAPI for external/public/partner integrations",
+      "monorepo": "Turborepo + pnpm for web/api/mobile packages; move to Nx if >5 teams/apps",
+      "infra": "Docker, managed Kubernetes/ECS after platform maturity, Terraform, OpenTelemetry, SOC2/HIPAA-aligned cloud, data residency controls",
+      "mobile_logging": "React Native (Expo) sharing TS types via monorepo"
+    },
+    "avoid_early": ["full Kubernetes self-hosting before platform maturity", "Kafka before PMF", "Rust/Go for CRUD services", "separate frontend/backend repos before team scale"],
+    "milestone_gates": {
+      "gate_1": "Phase 0-1 shipped on TS monolith + Postgres + Redis; observability baseline",
+      "gate_2": "AI surface (FastAPI) when biomarker interpretation ships (Phase 3/9)",
+      "gate_3": "event streaming and managed K8s when throughput/SLAs demand (Phase 5+)"
+    }
+  }
+}

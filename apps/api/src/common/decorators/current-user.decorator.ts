@@ -1,0 +1,17 @@
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+export interface AuthUser {
+  id: string;
+  handle: string;
+  displayName: string;
+}
+
+/**
+ * Injects the authenticated user resolved by AuthGuard.
+ */
+export const CurrentUser = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): AuthUser => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.user as AuthUser;
+  },
+);
