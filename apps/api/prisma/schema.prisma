@@ -50,6 +50,20 @@ enum OutboxStatus {
   FAILED
 }
 
+/// Lifecycle of a booking. `HELD` is a soft, expiring reservation that lives in
+/// the SAME table as firm bookings on purpose: a single PostgreSQL exclusion
+/// constraint then enforces "no two overlapping reservations on one
+/// practitioner" atomically across holds and bookings, instead of a racy
+/// check-then-insert against two tables.
+enum BookingStatus {
+  HELD
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
 model User {
   id           String   @id @default(cuid())
   handle       String   @unique
@@ -77,6 +91,12 @@ model User {
   followers    Follow[]             @relation("following")
   memberships  ConversationMember[]
   messages     Message[]
+
+  sessionTypes           SessionType[]
+  availability           PractitionerAvailability[]
+  bookingsAsPractitioner Booking[]            @relation("practitionerBookings")
+  bookingsAsMember       Booking[]            @relation("memberBookings")
+  bookingOperations      BookingOperation[]
 
   @@index([isCelebrity])
 }
@@ -214,4 +234,109 @@ model OutboxEvent {
   processedAt DateTime?
 
   @@index([status, availableAt])
+}
+
+/// Catalog of what a practitioner can be booked for. Price is stored in minor
+/// units (cents) as integers — never floats — so ledger arithmetic is exact.
+model SessionType {
+  id              String   @id @default(cuid())
+  practitionerId  String
+  practitioner    User     @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  durationMinutes Int
+  priceCents      Int
+  currency        String   @default("USD")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  bookings Booking[]
+
+  @@unique([practitionerId, name])
+  @@index([practitionerId, active])
+}
+
+/// Recurring weekly availability, expressed in the practitioner's local
+/// wall-clock time (weekday + minutes from local midnight) plus an IANA
+/// timezone. Slot lookup expands this into concrete UTC instants for the
+/// requested date range.
+model PractitionerAvailability {
+  id             String   @id @default(cuid())
+  practitionerId String
+  practitioner   User     @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  /// 0 = Sunday … 6 = Saturday, in the practitioner's timezone.
+  weekday        Int
+  /// Minutes from local midnight, inclusive.
+  startMinute    Int
+  /// Minutes from local midnight, exclusive.
+  endMinute      Int
+  timezone       String   @default("UTC")
+  createdAt      DateTime @default(now())
+
+  @@index([practitionerId, weekday])
+}
+
+/// A reservation on a practitioner's calendar. Covers holds and firm bookings.
+///
+/// The overlap invariant is enforced by a PostgreSQL exclusion constraint
+/// created in the migration:
+///
+///   EXCLUDE USING gist (
+///     "practitionerId" WITH =,
+///     tstzrange("startTime", "endTime", '[)') WITH &&
+///   ) WHERE status IN ('HELD','PENDING','CONFIRMED')
+///
+/// The database, not application code, is the arbiter of who wins a race for
+/// the same slot: the loser gets SQLSTATE 23P01 and we translate it to 409.
+model Booking {
+  id             String        @id @default(cuid())
+  practitionerId String
+  practitioner   User          @relation("practitionerBookings", fields: [practitionerId], references: [id], onDelete: Cascade)
+  memberId       String
+  member         User          @relation("memberBookings", fields: [memberId], references: [id], onDelete: Cascade)
+  sessionTypeId  String
+  sessionType    SessionType   @relation(fields: [sessionTypeId], references: [id])
+  startTime      DateTime      @db.Timestamptz(3)
+  endTime        DateTime      @db.Timestamptz(3)
+  status         BookingStatus @default(PENDING)
+
+  /// Price captured at booking time so later catalog edits do not rewrite history.
+  priceCents Int
+  currency   String @default("USD")
+
+  /// Soft-reservation expiry. Only meaningful while status = HELD.
+  holdExpiresAt DateTime? @db.Timestamptz(3)
+
+  clientOpId   String?
+  confirmedAt  DateTime? @db.Timestamptz(3)
+  cancelledAt  DateTime? @db.Timestamptz(3)
+  cancelReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// A create request with the same (member, clientOpId) is the same intent.
+  @@unique([memberId, clientOpId])
+  @@index([memberId, startTime(sort: Desc)])
+  @@index([practitionerId, startTime])
+  @@index([status, holdExpiresAt])
+  @@index([status, startTime])
+}
+
+/// Idempotency ledger for mutating booking operations (reschedule, cancel,
+/// hold). The unique (userId, opId) is the retry key: the first request records
+/// its result, and a retry with the same op id returns that recorded result
+/// instead of repeating the side effect.
+model BookingOperation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opId      String
+  action    String
+  bookingId String?
+  response  Json?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, opId])
+  @@index([createdAt])
 }

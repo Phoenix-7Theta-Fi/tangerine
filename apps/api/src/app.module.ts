@@ -13,6 +13,7 @@ import { FollowModule } from './follow/follow.module';
 import { PostsModule } from './posts/posts.module';
 import { FeedModule } from './feed/feed.module';
 import { ChatModule } from './chat/chat.module';
+import { SchedulingModule } from './scheduling/scheduling.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
 
@@ -31,6 +32,7 @@ import { HealthModule } from './health/health.module';
     PostsModule,
     FeedModule,
     ChatModule,
+    SchedulingModule,
     MetricsModule,
     HealthModule,
   ],

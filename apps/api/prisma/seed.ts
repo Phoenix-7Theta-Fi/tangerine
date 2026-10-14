@@ -130,6 +130,10 @@ const POST_BODIES = [
 
 async function main() {
   console.log('Clearing existing data...');
+  await prisma.booking.deleteMany();
+  await prisma.bookingOperation.deleteMany();
+  await prisma.sessionType.deleteMany();
+  await prisma.practitionerAvailability.deleteMany();
   await prisma.message.deleteMany();
   await prisma.conversationMember.deleteMany();
   await prisma.conversation.deleteMany();
@@ -218,6 +222,52 @@ async function main() {
   );
   console.log(
     `  ${users.length} users, ${follows.length} follows, ${celebrities.length} celebrities (threshold ${CELEBRITY_THRESHOLD})`,
+  );
+
+  console.log('Creating session types and weekly availability...');
+  const SESSION_TYPE_TEMPLATES: {
+    name: string;
+    durationMinutes: number;
+    priceCents: number;
+  }[] = [
+    { name: 'Initial consult', durationMinutes: 60, priceCents: 18000 },
+    { name: 'Follow-up', durationMinutes: 30, priceCents: 9000 },
+    { name: 'Coaching session', durationMinutes: 45, priceCents: 12000 },
+    { name: 'Group class', durationMinutes: 60, priceCents: 4000 },
+  ];
+  // A few distinct IANA zones so the timezone-aware slot expansion is exercised.
+  const TZ_BY_HANDLE: Record<string, string> = {
+    'dr.aruna': 'Asia/Kolkata',
+    'coach.tom': 'America/Chicago',
+    'dr.meyer': 'Europe/Zurich',
+    'rd.nadia': 'Africa/Cairo',
+  };
+  for (const p of practitioners) {
+    // The flagship practitioner gets the full catalog; others get two types.
+    const templates =
+      p.handle === 'dr.aruna'
+        ? SESSION_TYPE_TEMPLATES
+        : SESSION_TYPE_TEMPLATES.slice(0, 2);
+    for (const t of templates) {
+      await prisma.sessionType.create({
+        data: { practitionerId: p.id, ...t, currency: 'USD' },
+      });
+    }
+    const timezone = TZ_BY_HANDLE[p.handle] ?? 'UTC';
+    for (let weekday = 1; weekday <= 5; weekday++) {
+      await prisma.practitionerAvailability.create({
+        data: {
+          practitionerId: p.id,
+          weekday,
+          startMinute: 9 * 60,
+          endMinute: 17 * 60,
+          timezone,
+        },
+      });
+    }
+  }
+  console.log(
+    `  ${practitioners.length} practitioners, ${SESSION_TYPE_TEMPLATES.length} session-type templates, Mon–Fri 09:00–17:00`,
   );
 
   console.log('Creating posts...');

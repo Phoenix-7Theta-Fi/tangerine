@@ -1,0 +1,14 @@
+{
+  "practitionerId": "cmv7mjlgr0000m6g5ge1z45l3",
+  "practitionerHandle": "perf.practitioner",
+  "sessionTypeId": "cmv7mjlhc0002m6g50kft92y9",
+  "sessionTypeName": "Perf slot",
+  "bookingCount": 0,
+  "slotMinutes": 15,
+  "startDays": 1,
+  "spanDays": 0,
+  "window": {
+    "fromDays": 1,
+    "toDays": 2
+  }
+}

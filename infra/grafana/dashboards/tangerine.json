@@ -1,0 +1,185 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["tangerine", "performance"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "Tangerine — API Performance",
+  "uid": "tangerine-api",
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP request rate by route",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (route) (rate(tangerine_http_requests_total{status!=\"401\"}[1m]))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP latency p50 / p95 / p99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "p50",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(tangerine_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(tangerine_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(tangerine_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Outbox lag (oldest unrelayed event)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tangerine_outbox_oldest_pending_seconds",
+          "legendFormat": "lag"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Outbox events by status",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tangerine_outbox_events",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Fan-out queue depth by state",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tangerine_fanout_queue_jobs",
+          "legendFormat": "{{state}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Booking outcomes (rate)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "created",
+          "expr": "rate(tangerine_bookings_created_total[1m])",
+          "legendFormat": "bookings created"
+        },
+        {
+          "refId": "conflict",
+          "expr": "rate(tangerine_booking_conflicts_total[1m])",
+          "legendFormat": "conflicts (409)"
+        },
+        {
+          "refId": "holds",
+          "expr": "rate(tangerine_booking_holds_created_total[1m])",
+          "legendFormat": "holds created"
+        },
+        {
+          "refId": "replay",
+          "expr": "rate(tangerine_idempotent_replays_total[1m])",
+          "legendFormat": "idempotent replays"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Active reservations & expired-hold backlog",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tangerine_booking_active_reservations",
+          "legendFormat": "active"
+        },
+        {
+          "refId": "B",
+          "expr": "tangerine_booking_expired_holds_pending",
+          "legendFormat": "expired, awaiting sweep"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Node event-loop lag (p99)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tangerine_nodejs_eventloop_lag_p99_seconds",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Process memory",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tangerine_nodejs_heap_size_used_bytes",
+          "legendFormat": "heap used"
+        },
+        {
+          "refId": "B",
+          "expr": "tangerine_process_resident_memory_bytes",
+          "legendFormat": "RSS"
+        }
+      ]
+    }
+  ]
+}

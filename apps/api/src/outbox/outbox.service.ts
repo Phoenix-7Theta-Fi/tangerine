@@ -14,12 +14,27 @@ import { FANOUT_QUEUE } from '../queue/queue.module';
 import type { AppConfig } from '../config/configuration';
 
 export const POST_CREATED = 'post.created';
+export const BOOKING_CONFIRMED = 'booking.confirmed';
+export const BOOKING_CANCELLED = 'booking.cancelled';
 
 export interface PostCreatedPayload {
   postId: string;
   authorId: string;
   createdAt: string;
   authorIsCelebrity: boolean;
+}
+
+export interface BookingEventPayload {
+  bookingId: string;
+  practitionerId: string;
+  memberId: string;
+  sessionTypeId: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  rescheduled?: boolean;
+  reason?: string | null;
+  withinNoticeWindow?: boolean;
 }
 
 interface PendingRow {

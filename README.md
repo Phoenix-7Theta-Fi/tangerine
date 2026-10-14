@@ -37,6 +37,9 @@ fan-out and realtime messaging — stay front and centre.
 | Realtime   | Socket.IO gateways                  | Rooms, acks, and a Redis adapter for horizontal scale          |
 | Infra      | Docker Compose, pnpm workspaces     | One command to start everything; clean monorepo boundaries      |
 
+Stack decisions, trade-offs and scaling limits are documented in
+[docs/architecture.md](docs/architecture.md).
+
 ## Quick start
 
 ```bash
@@ -130,6 +133,41 @@ transaction**:
 - **Scale-out.** The Socket.IO Redis adapter lets any API instance deliver an
   event to a socket held by another instance.
 
+### Scheduling & booking — the database arbitrates contention
+
+A booking race is a correctness problem disguised as a performance problem. The
+obvious implementation — read the calendar, check for an overlap, insert — is a
+check-then-insert race that silently double-books under concurrency. Tangerine
+makes the **database** the arbiter:
+
+- **One exclusion constraint owns the invariant.** A single PostgreSQL `EXCLUDE
+  USING gist` constraint over `(practitionerId, tstzrange(startTime, endTime))`
+  covers both firm bookings *and* soft holds, so no two live reservations can
+  overlap. The loser of a race gets SQLSTATE `23P01`, which the API translates
+  to a clean `409` — never application-level locking.
+- **Holds are bookings with an expiry**, not a second table. That is the whole
+  reason a hold can block a booking atomically: they share one exclusion index.
+  A hold is released by flipping its status, which instantly frees the slot.
+- **Idempotent mutations.** `reschedule` and `cancel` take a client `opId`; the
+  first request records its result in an idempotency ledger keyed by
+  `(userId, opId)`, and a retry returns the recorded result instead of moving
+  the booking twice.
+- **Contention is serialized on the contended slot, not retried.** A GiST
+  exclusion index deadlocks under a multi-way race (a documented PostgreSQL
+  limitation), so booking takes a transaction-scoped **advisory lock keyed by
+  `(practitioner, startTime)`** before the insert. The constraint stays as the
+  backstop; the lock removes the deadlock. Benchmark: 200/200 races with exactly
+  one winner and zero `5xx` (baseline: 230 `5xx`).
+- **Timezone-aware slots.** Availability is stored as the practitioner's local
+  wall clock plus an IANA zone; slot lookup expands it to UTC instants (DST and
+  all) and subtracts live reservations, with an optional `maxSlots` cap.
+- **Confirmation rides the outbox.** A confirmed booking emits
+  `booking.confirmed` through the same transactional outbox as post fan-out, so
+  the notification pipeline can consume it durably.
+
+The benchmarks in `docs/performance/` prove the invariants under load — and
+expose what actually breaks first (the connection pool, not the constraint).
+
 ### Backend craft
 
 - Modular monolith with clear boundaries (`users`, `follow`, `posts`, `feed`,
@@ -154,7 +192,8 @@ Full, interactive docs at `http://localhost:3001/docs`.
 | Posts   | `POST /posts`, `GET/DELETE /posts/:id`, `POST/DELETE /posts/:id/like`, `GET/POST /posts/:id/comments`, `GET /users/:id/posts` |
 | Feed    | `GET /feed?limit&cursor`                                                   |
 | Chat    | `GET /conversations`, `POST /conversations/direct`, `GET/POST /conversations/:id/messages`, `POST /conversations/:id/read` |
-| Ops     | `GET /metrics` (Prometheus: outbox lag, queue depth), `GET /health`        |
+| Scheduling | `GET/POST /session-types`, `GET/PUT /practitioners/me/availability`, `GET /practitioners/:id/slots`, `POST/GET /bookings`, `POST /bookings/:id/reschedule`, `POST /bookings/:id/cancel`, `POST /holds`, `DELETE /holds/:id` |
+| Ops     | `GET /metrics` (Prometheus: outbox lag, queue depth, booking outcomes, Node runtime), `GET /health`        |
 
 ### Socket events
 
@@ -190,6 +229,29 @@ pnpm test:e2e      # end-to-end against real Postgres + Redis
   duplicate ids across pages, fan-out reaching a follower's feed, and the
   send/list chat flow.
 
+## Performance program
+
+This project's deliverable is evidence, not features. `docs/performance/`
+contains the methodology, machine spec, and one write-up per measured scenario
+(hypothesis → methodology → results → analysis → optimization → what it proves).
+
+- **Instrumentation**: Prometheus + Grafana (provisioned, `docker compose up -d`),
+  `pg_stat_statements`, rich `/api/metrics` (outbox lag, queue depth, booking
+  outcomes, event-loop lag, heap), and a k6 harness in `apps/api/performance/`.
+- **Scheduling scenarios**: booking contention, slot lookup under load,
+  reschedule idempotency, hold-expiry accuracy.
+- **Existing-system scenario**: warm feed read throughput.
+
+```bash
+pnpm infra:up                       # postgres + redis + prometheus + grafana
+pnpm db:seed
+pnpm --filter @tangerine/api perf:seed-bookings   # synthetic slot-lookup data
+RUN_STAMP=local bash apps/api/performance/run-scheduling.sh
+node apps/api/performance/report.mjs apps/api/performance/results/local
+```
+
+Grafana: <http://localhost:3000/d/tangerine-api> · Prometheus: <http://localhost:9090>
+
 ## Project layout
 
 ```
@@ -197,20 +259,23 @@ tangerine/
 ├─ apps/
 │  ├─ api/                 # NestJS + Fastify + Prisma + Redis
 │  │  ├─ prisma/           # schema, migrations, deterministic seed
+│  │  ├─ performance/      # k6 harness, seed + report scripts
 │  │  ├─ src/
 │  │  │  ├─ feed/          # hybrid fan-out read path
 │  │  │  ├─ timeline/      # Redis materialized timelines
 │  │  │  ├─ outbox/        # transactional outbox + relay
 │  │  │  ├─ fanout/        # BullMQ worker (async fan-out)
 │  │  │  ├─ queue/         # BullMQ connection/queue wiring
-│  │  │  ├─ metrics/       # Prometheus exposition
+│  │  │  ├─ scheduling/    # conflict-safe booking, holds, idempotency
+│  │  │  ├─ metrics/       # Prometheus registry + HTTP instrumentation
 │  │  │  ├─ posts/ users/ follow/
 │  │  │  ├─ chat/          # service, gateway, REST
 │  │  │  ├─ realtime/      # socket server handle + presence
 │  │  │  └─ common/ redis/ prisma/ config/
-│  │  └─ test/             # e2e
+│  │  └─ test/             # e2e (including scheduling invariants)
 │  └─ web/                 # React + Vite (dark-only)
-├─ docs/frontend-spec.md
+├─ infra/                  # Prometheus scrape config + Grafana provisioning
+├─ docs/performance/       # benchmark write-ups + optimization log
 ├─ docker-compose.yml
 └─ pnpm-workspace.yaml
 ```

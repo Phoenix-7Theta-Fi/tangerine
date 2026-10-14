@@ -4,11 +4,17 @@ import type { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { FANOUT_QUEUE } from '../queue/queue.module';
-import { POST_CREATED, type PostCreatedPayload } from '../outbox/outbox.service';
+import {
+  BOOKING_CANCELLED,
+  BOOKING_CONFIRMED,
+  POST_CREATED,
+  type BookingEventPayload,
+  type PostCreatedPayload,
+} from '../outbox/outbox.service';
 
 interface FanoutJobData {
   eventId: string;
-  payload: PostCreatedPayload;
+  payload: PostCreatedPayload | BookingEventPayload;
 }
 
 /**
@@ -35,7 +41,7 @@ export class FanoutProcessor extends WorkerHost {
 
   async process(job: Job<FanoutJobData>): Promise<void> {
     if (job.name === POST_CREATED) {
-      const p = job.data.payload;
+      const p = job.data.payload as PostCreatedPayload;
       const { pushed, celebrity } = await this.timeline.fanoutPost({
         id: p.postId,
         authorId: p.authorId,
@@ -44,6 +50,15 @@ export class FanoutProcessor extends WorkerHost {
       });
       this.logger.debug(
         `fanned out ${p.postId}: pushed=${pushed} celebrity=${celebrity}`,
+      );
+    } else if (job.name === BOOKING_CONFIRMED || job.name === BOOKING_CANCELLED) {
+      // Booking lifecycle events ride the same outbox -> queue -> worker path as
+      // post fan-out. A real deployment fans these into the push/in-app
+      // notification pipeline (Feature List Part 3); here the worker is the
+      // durable consumer that guarantees delivery is not lost.
+      const p = job.data.payload as BookingEventPayload;
+      this.logger.debug(
+        `consumed ${job.name} for booking ${p.bookingId} (${p.status})`,
       );
     }
     await this.mark(job.data.eventId, 'PROCESSED');

@@ -7,6 +7,19 @@ services:
       POSTGRES_USER: tangerine
       POSTGRES_PASSWORD: tangerine
       POSTGRES_DB: tangerine
+    # pg_stat_statements is the ground truth for "which query is the
+    # bottleneck" in the benchmark writeups. track_io_timing makes the
+    # read/write breakdown in pg_stat_statements meaningful.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - track_io_timing=on
+      - -c
+      - max_connections=200
     ports:
       - "5432:5432"
     volumes:
@@ -32,6 +45,40 @@ services:
       timeout: 3s
       retries: 10
 
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: tangerine-prometheus
+    restart: unless-stopped
+    # Host networking so the scraper can reach the API on 127.0.0.1:3001.
+    network_mode: host
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - tangerine-promdata:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    container_name: tangerine-grafana
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SERVER_HTTP_PORT: "3000"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - tangerine-grafanadata:/var/lib/grafana
+
 volumes:
   tangerine-pgdata:
   tangerine-redisdata:
+  tangerine-promdata:
+  tangerine-grafanadata:
