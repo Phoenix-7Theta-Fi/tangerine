@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../common/guards/auth.guard';
+import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { LedgerService } from './ledger.service';
 import {
   ListLedgerTransactionsQueryDto,
@@ -20,19 +22,56 @@ import {
 @UseGuards(AuthGuard)
 @Controller('ledger')
 export class LedgerController {
-  constructor(private readonly ledger: LedgerService) {}
+  constructor(
+    private readonly ledger: LedgerService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post('transactions')
   @ApiOperation({
-    summary: 'Post one balanced double-entry transaction (idempotent on source)',
+    summary:
+      'Post one balanced double-entry transaction (exactly-once via idempotency key)',
   })
-  post(@Body() dto: PostTransactionDto) {
-    return this.ledger.postTransaction({
-      kind: dto.kind,
-      sourceType: dto.sourceType,
-      sourceId: dto.sourceId,
-      description: dto.description,
-      postings: dto.postings,
+  post(@CurrentUser() user: AuthUser, @Body() dto: PostTransactionDto) {
+    const key = IdempotencyService.ledgerKey(
+      dto.sourceType,
+      dto.sourceId,
+      dto.kind,
+    );
+    return this.idempotency.execute({
+      userId: user.id,
+      key,
+      request: dto,
+      action: 'ledger',
+      execute: async (ctx) => {
+        // Recovery point #1: durable before the side effect, so a retry after a
+        // crash knows the ledger write may or may not have happened. The write
+        // itself is idempotent on (sourceType, sourceId, kind), so re-running is
+        // safe.
+        if (ctx.recoveryPoint === null) {
+          await ctx.setRecoveryPoint('ledger.before-post');
+        }
+
+        // Test-only crash injection (Phase 2 recovery test). Env-gated and
+        // confined to source ids prefixed "crash:"; absent in production.
+        if (
+          process.env.IDEMPOTENCY_CRASH_TEST === '1' &&
+          dto.sourceId.startsWith('crash:') &&
+          ctx.recoveryPoint === null
+        ) {
+          throw new Error('simulated crash before ledger write');
+        }
+
+        const tx = await this.ledger.postTransaction({
+          kind: dto.kind,
+          sourceType: dto.sourceType,
+          sourceId: dto.sourceId,
+          description: dto.description,
+          postings: dto.postings,
+        });
+        await ctx.setRecoveryPoint('ledger.posted');
+        return tx;
+      },
     });
   }
 

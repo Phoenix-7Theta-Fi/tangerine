@@ -97,6 +97,7 @@ model User {
   bookingsAsPractitioner Booking[]            @relation("practitionerBookings")
   bookingsAsMember       Booking[]            @relation("memberBookings")
   bookingOperations      BookingOperation[]
+  idempotencyKeys        IdempotencyKey[]
 
   @@index([isCelebrity])
 }
@@ -414,4 +415,52 @@ model LedgerPosting {
 
   @@index([accountId, currency])
   @@index([transactionId])
+}
+
+/// ─────────────────────────────────────────────────────────────────────────
+/// Idempotency with recovery points (see docs/research/marketplace-payments-
+/// research.md §idempotency). Modelled on Stripe's Rocket Rides design and
+/// Brandur's "recovery points" essay.
+///
+/// Lifecycle: STARTED → COMPLETED, or STARTED → FAILED (retryable).
+///   * A retry with the same (userId, key) and an identical requestHash returns
+///     the recorded response without repeating the side effect.
+///   * The same key with a *different* requestHash is a 409.
+///   * `recoveryPoint` records the last durable checkpoint inside the operation
+///     so a retry after a crash can resume rather than restart.
+///   * `lockToken` is a fencing token: a worker whose lease expired and was
+///     taken over cannot overwrite the new attempt's result.
+/// ─────────────────────────────────────────────────────────────────────────
+
+enum IdempotencyStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+model IdempotencyKey {
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Caller-supplied key, unique per user.
+  key            String
+  /// SHA-256 of the canonical request; reuse with a different payload is a 409.
+  requestHash    String
+  status         IdempotencyStatus @default(STARTED)
+  /// Last durable checkpoint inside the operation, e.g. "ledger.posted".
+  recoveryPoint  String?
+  responseStatus Int?
+  responseBody   Json?
+  /// Fencing token for the current attempt.
+  lockToken      String?
+  /// When the current attempt began; used to detect an expired lease.
+  lockedAt       DateTime?
+  /// Recorded result is reusable until this instant (24h, mirroring Stripe).
+  expiresAt      DateTime
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([userId, key])
+  @@index([status, lockedAt])
+  @@index([expiresAt])
 }

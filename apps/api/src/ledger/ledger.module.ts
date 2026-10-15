@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { LedgerController } from './ledger.controller';
 import { LedgerService } from './ledger.service';
 
@@ -7,6 +8,7 @@ import { LedgerService } from './ledger.service';
  * every mutation idempotent on its source and chained by SHA-256 hash.
  */
 @Module({
+  imports: [IdempotencyModule],
   controllers: [LedgerController],
   providers: [LedgerService],
   exports: [LedgerService],
