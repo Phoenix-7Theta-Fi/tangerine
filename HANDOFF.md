@@ -438,7 +438,12 @@ Update status marker. Commit: `feat(marketplace): products, inventory reservatio
 
 ## Phase 6: Integration and Adversarial Testing
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-15T18:29:16Z — 4279e8d`
+
+> **Parallelism note:** the workloads share one database and reset the tables
+> they assert on, so `scripts/herdr-test-suite.sh` runs them **sequentially**
+> (one Herdr tab per workload for output isolation). `PARALLEL=1` is available
+> for disjoint-data setups. Full suite: **14/14 green**.
 
 ### Dependencies
 
@@ -517,7 +522,7 @@ Update status marker. Commit: `docs: performance write-ups and API documentation
 | 3 — Webhooks | `DONE` | `a1ed94d` | 2026-10-15T18:01:40Z |
 | 4 — Saga | `DONE` | `16178f4` | 2026-10-15T18:18:04Z |
 | 5 — Marketplace | `DONE` | `88146fd` | 2026-10-15T18:10:56Z |
-| 6 — Integration | `NOT STARTED` | | |
+| 6 — Integration | `DONE` | `4279e8d` | 2026-10-15T18:29:16Z |
 | 7 — Documentation | `NOT STARTED` | | |
 
 ---
