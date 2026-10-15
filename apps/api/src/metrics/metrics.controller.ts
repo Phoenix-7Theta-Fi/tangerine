@@ -27,7 +27,7 @@ export class MetricsController {
   @Get()
   @Header('content-type', 'text/plain; version=0.0.4; charset=utf-8')
   async scrape(): Promise<string> {
-    const [counts, grouped, oldest, activeReservations, expiredHolds] =
+    const [counts, grouped, oldest, activeReservations, expiredHolds, ledgerSums] =
       await Promise.all([
         this.queue.getJobCounts('wait', 'active', 'completed', 'failed', 'delayed'),
         this.prisma.outboxEvent.groupBy({
@@ -44,6 +44,10 @@ export class MetricsController {
         }),
         this.prisma.booking.count({
           where: { status: 'HELD', holdExpiresAt: { lt: new Date() } },
+        }),
+        this.prisma.ledgerPosting.groupBy({
+          by: ['direction'],
+          _sum: { amountCents: true },
         }),
       ]);
 
@@ -68,6 +72,15 @@ export class MetricsController {
     }
     this.metrics.activeReservations.set(activeReservations);
     this.metrics.expiredHoldsPending.set(expiredHolds);
+
+    // Ledger integrity signal: global debits must equal global credits. Any
+    // non-zero value means a transaction committed out of balance, which the
+    // deferred constraint trigger is supposed to make impossible.
+    const ledgerDebits =
+      ledgerSums.find((g) => g.direction === 'DEBIT')?._sum.amountCents ?? 0;
+    const ledgerCredits =
+      ledgerSums.find((g) => g.direction === 'CREDIT')?._sum.amountCents ?? 0;
+    this.metrics.ledgerBalanceImbalanceCents.set(ledgerDebits - ledgerCredits);
 
     return this.metrics.metrics();
   }

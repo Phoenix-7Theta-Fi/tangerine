@@ -340,3 +340,78 @@ model BookingOperation {
   @@unique([userId, opId])
   @@index([createdAt])
 }
+
+/// ─────────────────────────────────────────────────────────────────────────
+/// Double-entry ledger.
+///
+/// Invariants (see docs/research/marketplace-payments-research.md §2/§6):
+///   * Append-only. No UPDATE/DELETE. Enforced by a BEFORE UPDATE OR DELETE
+///     trigger that raises, PLUS `REVOKE UPDATE, DELETE ... FROM PUBLIC`.
+///   * Every transaction's postings net to zero. Enforced by a DEFERRABLE
+///     INITIALLY DEFERRED constraint trigger that fires at COMMIT, after all
+///     legs of the transaction are inserted.
+///   * Balances are derived, never stored (aggregate over the append-only
+///     postings). A stored balance is a cache that can drift; a sum cannot.
+///   * A SHA-256 hash chain over (previousHash, seq, …, postings) makes silent
+///     tampering detectable by LedgerService.verifyIntegrity().
+/// ─────────────────────────────────────────────────────────────────────────
+
+/// Debit or credit side of a posting.
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+/// Why a ledger transaction exists.
+enum LedgerTransactionKind {
+  CHARGE
+  REFUND
+  PAYOUT
+  PLATFORM_FEE
+  ESCROW_HOLD
+  ESCROW_RELEASE
+}
+
+/// One atomic, balanced unit of the ledger. Groups its postings.
+model LedgerTransaction {
+  id          String                @id @default(cuid())
+  /// Global, gap-free, monotonically increasing chain position. Assigned by
+  /// the service under an advisory lock (not the DB sequence) so the hash is
+  /// computable before insert — an append-only row cannot be UPDATEd later.
+  seq         Int                   @unique @default(autoincrement())
+  kind        LedgerTransactionKind
+  /// Domain object that caused this transaction, e.g. "Order"/"order_123".
+  sourceType  String
+  sourceId    String
+  description String?
+  createdAt   DateTime              @default(now())
+  /// Previous transaction's hash (null only at genesis).
+  previousHash String?
+  /// SHA-256 over the canonical encoding of this row + previousHash.
+  hash         String
+
+  postings LedgerPosting[]
+
+  /// Idempotency: at most one transaction per (sourceType, sourceId, kind).
+  @@unique([sourceType, sourceId, kind])
+  @@index([kind, createdAt])
+  @@index([createdAt])
+  @@index([sourceId])
+}
+
+/// A single debit or credit against one account. Append-only.
+model LedgerPosting {
+  id            String              @id @default(cuid())
+  transactionId String
+  transaction   LedgerTransaction   @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  /// Free-form account key: "user:<id>", "platform", "escrow:<orderId>", …
+  accountId     String
+  direction     LedgerDirection
+  /// Minor units (cents), always integers. Never floats.
+  amountCents   Int
+  currency      String              @default("USD")
+  createdAt     DateTime            @default(now())
+
+  @@index([accountId, currency])
+  @@index([transactionId])
+}

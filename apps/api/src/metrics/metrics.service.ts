@@ -65,6 +65,13 @@ export class MetricsService implements OnModuleInit {
     registers: [this.registry],
   });
 
+  readonly ledgerTransactions = new Counter({
+    name: 'tangerine_ledger_transactions_total',
+    help: 'Ledger transactions posted, by kind',
+    labelNames: ['kind'],
+    registers: [this.registry],
+  });
+
   // ── Gauges updated at scrape time from Postgres / BullMQ ──────────────
   readonly outboxEvents = new Gauge({
     name: 'tangerine_outbox_events',
@@ -95,6 +102,12 @@ export class MetricsService implements OnModuleInit {
   readonly expiredHoldsPending = new Gauge({
     name: 'tangerine_booking_expired_holds_pending',
     help: 'Holds past TTL not yet swept',
+    registers: [this.registry],
+  });
+
+  readonly ledgerBalanceImbalanceCents = new Gauge({
+    name: 'tangerine_ledger_balance_imbalance_cents',
+    help: 'Global debit-minus-credit imbalance across all ledger postings (must always be 0)',
     registers: [this.registry],
   });
 

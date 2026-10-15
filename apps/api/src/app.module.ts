@@ -14,6 +14,7 @@ import { PostsModule } from './posts/posts.module';
 import { FeedModule } from './feed/feed.module';
 import { ChatModule } from './chat/chat.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
+import { LedgerModule } from './ledger/ledger.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
 
@@ -33,6 +34,7 @@ import { HealthModule } from './health/health.module';
     FeedModule,
     ChatModule,
     SchedulingModule,
+    LedgerModule,
     MetricsModule,
     HealthModule,
   ],
