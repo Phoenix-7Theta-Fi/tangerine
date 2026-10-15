@@ -372,3 +372,23 @@ Source: the installed `herdr` binary itself (`herdr --help`, `herdr <group>`), 2
   caps ledger write concurrency at one writer at a time. For the demo volumes here this is
   irrelevant (microsecond critical sections), and correctness of the chain wins. If it ever
   matters, the chain can be sharded per account with a `(accountId, seq)` key.
+
+---
+
+## 10. Final note (Phase 7)
+
+This memo is the final research record. Each area below is grounded in the
+citations above and realised in the branch:
+
+| Research area | Shipped as |
+| --- | --- |
+| Deferred constraint triggers for balance (§2, cites 10–12) | `LedgerTransaction` / `LedgerPosting` + `ledger_assert_balanced()` constraint trigger in `apps/api/prisma/migrations/*_double_entry_ledger` |
+| Idempotency keys, recovery points, leases (§5, cites 7–9) | `apps/api/src/idempotency/` (`claim → run → finalize`, lease + fencing token) |
+| Webhook signature verification, thin-event dedup (§1, cites 4–5) | `apps/api/src/webhooks/` (raw-body `constructEvent`, `WebhookEvent` inbox, order-independent `Payment` state machine) |
+| Saga orchestration, LIFO compensation (§7, cites 16–17) | `apps/api/src/saga/` (`SagaOrchestrator` + checkout saga) |
+| Inventory / optimistic locking (§6) | `apps/api/src/marketplace/` |
+
+Measured outcomes and the one deliberately rejected design (holding an
+idempotency row lock across the operation) are recorded in
+`docs/performance/payments.md`, `docs/performance/marketplace.md`, and
+`docs/performance/optimization-log.md`.

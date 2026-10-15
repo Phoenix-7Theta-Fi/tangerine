@@ -6,8 +6,10 @@ opinionated slice built to show how I design and ship backend systems: correct
 data models, the right abstractions at the right time, tests, and code you can
 hand to another engineer.
 
-Onboarding, signup, payments and compliance flows are **deliberately abstracted
-away** (see [What is intentionally out of scope](#what-is-intentionally-out-of-scope)).
+Onboarding, signup and compliance flows are **deliberately abstracted away**
+(see [What is intentionally out of scope](#what-is-intentionally-out-of-scope));
+payments and the marketplace are now in scope (see [Engineering
+highlights](#engineering-highlights)).
 Identity is mocked with a user switcher so the interesting problems — feed
 fan-out and realtime messaging — stay front and centre.
 
@@ -168,6 +170,58 @@ makes the **database** the arbiter:
 The benchmarks in `docs/performance/` prove the invariants under load — and
 expose what actually breaks first (the connection pool, not the constraint).
 
+### Payments — money invariants live in the database
+
+Payments are a correctness problem, so the invariants are pushed as far down as
+they can go and the API is a thin layer on top:
+
+- **Double-entry ledger, enforced by Postgres.** `LedgerTransaction` groups
+  postings; a **deferred constraint trigger** raises at `COMMIT` unless
+  `SUM(DEBIT) − SUM(CREDIT) = 0`, so even a direct `INSERT` that bypasses the API
+  is rejected. Row triggers plus `REVOKE UPDATE, DELETE` make both tables
+  **append-only**. Balances are always *derived* by aggregation — a stored
+  balance is a cache that can drift; a sum cannot.
+- **Tamper-evident hash chain.** Each transaction carries `previousHash` and a
+  SHA-256 over a canonical encoding of its legs, extended under a
+  transaction-scoped advisory lock so `seq` is gap-free. `GET /api/ledger/verify`
+  walks the chain and reports the first broken link.
+- **Exactly-once writes.** A generic `IdempotencyService` (claim → run → finalize,
+  with a lease and a fencing token) records the response keyed by
+  `(userId, key)`; a retry replays it, and a **recovery point** lets a retry after
+  a crash resume rather than restart. A reused key with a different body is a
+  `409`.
+- **At-least-once webhooks, handled once.** `POST /api/webhooks/stripe`
+  verifies the signature over the **raw body**, deduplicates through a
+  transactional inbox (`WebhookEvent`, unique on `source + eventId`), and applies
+  an **order-independent** payment state machine — a late `created` after
+  `succeeded` is a no-op, and `succeeded` before `created` still lands.
+
+Behavioral proof (`docs/performance/payments.md`): 100 concurrent balanced
+writes leave imbalance `0` with zero trigger exceptions; 100 concurrent
+duplicate requests produce one ledger transaction and one replayed response; 100
+webhook replays produce one inbox row, one transition, and one ledger entry.
+
+### Marketplace — contention, each problem at its own layer
+
+- **Inventory is a hot-row count.** Reservation is one conditional `UPDATE`
+  (`WHERE quantity - reserved >= n`), so the predicate and the increment are
+  atomic under the row lock and `reserved ≤ quantity` is unrepresentable to
+  break. 100 checkouts for 10 units yield **exactly 10 winners**.
+- **Cart uses optimistic locking.** Every edit presents the version it read;
+  `UPDATE ... WHERE version = ?` matching zero rows *is* the conflict, surfaced as
+  `409`.
+- **Orders are a data-driven state machine.** A transition table maps each status
+  to its legal successors; illegal moves are rejected and counted, and every
+  applied change is appended to `OrderStateTransition`.
+- **Checkout is an orchestrated saga.** `reserve → charge → ledger → confirm →
+  notify`, with **LIFO compensations** (release, refund, reversing entry) and an
+  `onFailure` hook that cancels an unconfirmed order. Step progress is persisted
+  in `SagaState`, and failures are injectable for testing.
+
+Behavioral proof (`docs/performance/marketplace.md`): the inventory race, the
+cart conflict, all 192 order-transition triples, and forcing each saga step to
+fail (asserting the exact compensation set).
+
 ### Backend craft
 
 - Modular monolith with clear boundaries (`users`, `follow`, `posts`, `feed`,
@@ -193,7 +247,11 @@ Full, interactive docs at `http://localhost:3001/docs`.
 | Feed    | `GET /feed?limit&cursor`                                                   |
 | Chat    | `GET /conversations`, `POST /conversations/direct`, `GET/POST /conversations/:id/messages`, `POST /conversations/:id/read` |
 | Scheduling | `GET/POST /session-types`, `GET/PUT /practitioners/me/availability`, `GET /practitioners/:id/slots`, `POST/GET /bookings`, `POST /bookings/:id/reschedule`, `POST /bookings/:id/cancel`, `POST /holds`, `DELETE /holds/:id` |
-| Ops     | `GET /metrics` (Prometheus: outbox lag, queue depth, booking outcomes, Node runtime), `GET /health`        |
+| Ledger  | `POST/GET /ledger/transactions`, `GET /ledger/accounts/:accountId/balance`, `GET /ledger/verify` |
+| Webhooks | `POST /webhooks/stripe` (signature-verified, `stripe-signature` header; no `x-user-id`) |
+| Marketplace | `GET/POST /marketplace/products`, `POST /marketplace/inventory/:productId/reserve`, `POST /marketplace/inventory/:productId/release`, `GET /marketplace/cart`, `POST /marketplace/cart/items`, `POST /marketplace/orders`, `GET /marketplace/orders/:id`, `POST /marketplace/orders/:id/transition` |
+| Sagas   | `POST /sagas/checkout`, `GET /sagas`, `GET /sagas/:id` |
+| Ops     | `GET /metrics` (Prometheus: outbox lag, queue depth, booking outcomes, ledger/webhook/saga/inventory/order counters, Node runtime), `GET /health`        |
 
 ### Socket events
 
@@ -229,6 +287,23 @@ pnpm test:e2e      # end-to-end against real Postgres + Redis
   duplicate ids across pages, fan-out reaching a follower's feed, and the
   send/list chat flow.
 
+### Behavioral / adversarial suite
+
+The payments and marketplace invariants are proved by **behavioral** scripts
+(`scripts/*.sh`) run against the live API and Postgres — no mocks. They fire the
+adversarial case and assert the invariant, not the happy path: 100 concurrent
+ledger writes, 100 duplicate requests, 100 webhook replays, 100 checkouts for 10
+units, forced saga failures at every step.
+
+```bash
+bash scripts/herdr-test-suite.sh     # all 14 workloads; 14/14 green
+```
+
+`herdr-test-suite.sh` runs each workload in its own Herdr tab (sequentially —
+they share one database) and sends a completion notification. The individual
+harnesses are indexed in `docs/performance/payments.md` and
+`docs/performance/marketplace.md`.
+
 ## Performance program
 
 This project's deliverable is evidence, not features. `docs/performance/`
@@ -240,6 +315,10 @@ contains the methodology, machine spec, and one write-up per measured scenario
   outcomes, event-loop lag, heap), and a k6 harness in `apps/api/performance/`.
 - **Scheduling scenarios**: booking contention, slot lookup under load,
   reschedule idempotency, hold-expiry accuracy.
+- **Payments scenarios**: ledger balance under 100 concurrent writes, idempotent
+  writes with crash recovery, webhook replay and order-independence.
+- **Marketplace scenarios**: inventory race (100 vs 10 units), cart conflict,
+  exhaustive order-state transitions, checkout-saga compensation.
 - **Existing-system scenario**: warm feed read throughput.
 
 ```bash
@@ -267,6 +346,11 @@ tangerine/
 │  │  │  ├─ fanout/        # BullMQ worker (async fan-out)
 │  │  │  ├─ queue/         # BullMQ connection/queue wiring
 │  │  │  ├─ scheduling/    # conflict-safe booking, holds, idempotency
+│  │  │  ├─ ledger/        # double-entry ledger, deferred constraint, hash chain
+│  │  │  ├─ idempotency/   # exactly-once writes with recovery points
+│  │  │  ├─ webhooks/      # signature verify, inbox dedup, payment state machine
+│  │  │  ├─ marketplace/   # products, inventory, cart, orders
+│  │  │  ├─ saga/          # checkout orchestration + LIFO compensations
 │  │  │  ├─ metrics/       # Prometheus registry + HTTP instrumentation
 │  │  │  ├─ posts/ users/ follow/
 │  │  │  ├─ chat/          # service, gateway, REST
@@ -287,8 +371,12 @@ hidden:
 
 - **Auth** — no signup/session issuance; identity is an `x-user-id` header
   resolved by one guard. Swapping in JWT/session verification touches one file.
-- **Onboarding, consent, verification, moderation, payments** — the compliance
-  and commerce layer from the product's full feature list.
+- **Onboarding, consent, verification, moderation** — the compliance layer from
+  the product's full feature list.
+- **Live Stripe calls** — the payment gateway is a local, offline stand-in that
+  records a `Payment` row and charges/refunds it. The `PaymentGateway` interface
+  is the seam; swapping in the Stripe SDK (create/refund a PaymentIntent) touches
+  one class. Webhook *verification* is real (`constructEvent` over the raw body).
 - **Media** — posts carry an optional `mediaUrl`; there is no upload pipeline.
 - **Push notifications** — offline users catch up on reconnect, but there is no
   APNs/FCM integration.

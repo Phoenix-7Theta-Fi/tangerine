@@ -6,8 +6,11 @@ analysis with tool output, and — where an optimization was warranted — a
 before/after. A feature is only "done" when it appears here.
 
 Raw artifacts: `apps/api/performance/results/<run>/` (k6 summary JSON).
-Charts: `docs/performance/assets/` (rendered by
-`apps/api/performance/report.mjs`).
+Charts: the scheduling write-ups use committed SVG under
+`docs/performance/assets/` (rendered by `apps/api/performance/report.mjs`);
+the payments and marketplace write-ups use inline
+[Mermaid](https://mermaid.js.org/) diagrams (rendered by the markdown host),
+which avoid hand-authored SVG.
 
 ## 1. Machine spec
 
@@ -58,6 +61,10 @@ metrics, or the k6 artifact — never a guess.
   counts, fan-out queue depth, booking outcomes
   (created / holds / conflicts / idempotent replays), active reservations,
   expired-hold backlog, Node event-loop lag, heap + RSS.
+- Payments & marketplace: ledger transactions by kind and the
+  `ledger_balance_imbalance_cents` gauge (must be 0), idempotent replays,
+  webhook events by outcome, saga runs and compensations, inventory reservations
+  by outcome, cart conflicts, order transitions by legality, `orders_stuck_pending`.
 - Postgres: `pg_stat_statements`, `pg_stat_activity`, `EXPLAIN (ANALYZE,
   BUFFERS)`.
 - Redis: `SLOWLOG`, `INFO`, key counts by pattern.
@@ -79,6 +86,23 @@ metrics, or the k6 artifact — never a guess.
 | Scenario | Script | Status | Headline |
 | --- | --- | --- | --- |
 | Feed read throughput | `feed-read.js` | measured | **597 req/s**, p95 41 ms, 0 % errors |
+
+### Payments & marketplace (new capability)
+
+Behavioral harnesses (not k6) against the live API + Postgres; details in
+`payments.md` and `marketplace.md`.
+
+| Scenario | Script | Status | Headline |
+| --- | --- | --- | --- |
+| Ledger balance under concurrency | `test-ledger.sh` | measured | 100 concurrent writes, **imbalance 0**, 0 trigger exceptions |
+| Idempotent writes + recovery | `test-idempotency.sh` | measured | 100 duplicates → **1 tx, 1 response**; crash → resume |
+| Webhook replay | `test-webhook-idempotency.sh` | measured | 100 replays → **1 inbox, 1 transition, 1 ledger tx** |
+| Webhook ordering | `test-webhook-ordering.sh` / `test-out-of-order.sh` | measured | terminal state order-independent; 20/20 shuffled rounds |
+| Inventory race | `test-inventory-race.sh` | measured | 100 contenders / 10 units → **exactly 10 winners** (0.27 s) |
+| Cart conflict | `test-cart-concurrency.sh` | measured | same version → **1 × 201, 1 × 409** |
+| Order state machine | `test-order-state-machine.sh` | measured | **192 triples, 0 mismatches** |
+| Saga compensation | `test-saga-compensation.sh` / `test-saga-failure.sh` | measured | LIFO compensation; every step forced to fail |
+| Full suite | `herdr-test-suite.sh` | measured | **14/14 workloads green** |
 
 ### Visuals
 

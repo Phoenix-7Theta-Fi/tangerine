@@ -186,3 +186,87 @@ Profile before optimizing. The expensive-looking code (`O(candidates ×
 conflicts)`) was not the bottleneck; an unremarkable `Intl` call per slot was.
 A 4× win came from caching one value per day, not from rewriting the algorithm.
 
+
+---
+
+## 2026-10-15 — Payments & marketplace: invariants in the database, one deliberate rejection
+
+**Scenarios:** `test-ledger`, `test-idempotency`, `test-webhook-idempotency`,
+`test-inventory-race`, `test-cart-concurrency`, `test-order-state-machine`,
+`test-saga-compensation`, `test-saga-failure` (behavioral harnesses; see
+`docs/performance/payments.md` and `docs/performance/marketplace.md`).
+
+### Observation
+
+Every scenario held its invariant on the first correct design, so there is no
+before/after *tuning* here the way there is for booking contention. The value is
+in three design decisions that are easy to get subtly wrong, and one approach
+that was deliberately **rejected** rather than tried and discarded.
+
+Measured (single host, shared with Postgres):
+
+| Scenario | Result |
+| --- | --- |
+| Ledger, 100 concurrent balanced writes | 100 accepted, imbalance 0, 0 trigger exceptions, 1.58 s |
+| Idempotency, 100 concurrent identical | 1 ledger tx, 1 distinct response, 99 replays |
+| Webhook, 100 replays | 1 inbox row, 1 transition, 1 ledger tx |
+| Inventory race, 100 vs 10 units | exactly 10 winners, 0.27 s |
+| Cart, 2 edits same version | 1 × 201, 1 × 409 |
+| Order state machine | 192 triples, 0 mismatches |
+
+### Decision 1 — balance is a deferred constraint trigger
+
+`CREATE CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` fires at `COMMIT`,
+after all legs of a transaction are inserted. A direct `INSERT` that bypasses the
+API — all postings, then `COMMIT` — is rejected with
+`ledger transaction ... is unbalanced by N cents`, rc=3. Correctness does not
+depend on the service validating first.
+
+### Decision 2 — the ledger chain lock is global and serialising
+
+`seq` is assigned by the service under `pg_advisory_xact_lock(9317)`, not by a
+DB sequence, because the SHA-256 hash must be computable **before** the row is
+inserted (append-only rows cannot be back-filled). This caps ledger writes at
+one-at-a-time extension. Accepted because the critical section is microseconds
+and chain integrity is worth more; documented as the first thing to shard
+(per-account `(accountId, seq)`) if throughput ever matters. It is also recorded
+in the research memo §9.
+
+### Decision 3 (rejected before it was built) — holding the idempotency row lock across the operation
+
+The naive idempotency implementation holds `SELECT ... FOR UPDATE` on the key's
+row for the **whole** operation. Under a 100-way stampede on one key this
+deadlocks the connection pool, and it is arithmetic, not luck:
+
+- The predicate is on a single row, so exactly one caller can proceed; the other
+  99 block on that row lock.
+- Each blocked caller **holds a pooled connection** while waiting. With
+  `connection_limit=40`, all 40 connections are held by lock-waiters and none is
+  free.
+- The one caller that holds the lock now needs a *second* connection (the
+  ledger write runs in its own transaction) and cannot get one → pool timeout.
+
+The accepted design is **claim-run-finalize**: a short claim transaction takes
+the lock, decides (cached / wait / run) and commits; the operation then runs
+**outside** any held lock; a final short update marks it `COMPLETED`. Duplicates
+poll a non-locking read until the winner records its response. A lease
+(`lockedAt`) plus a fencing token (`lockToken`) makes takeover safe, so a worker
+whose lease expired cannot overwrite the attempt that replaced it.
+
+This is the same lesson as booking contention in a different costume: the
+database's row lock is the right arbiter, but **how long you hold it** is a
+design choice with a failure mode of its own.
+
+### Full suite
+
+`scripts/herdr-test-suite.sh` runs all 14 workloads and reports:
+
+```
+passed=14 failed=0 total=14
+```
+
+The workloads share one database and reset the tables they assert on, so the
+suite runs them **sequentially** (one Herdr tab per workload for output
+isolation); `PARALLEL=1` is available for disjoint-data setups. Two metric
+assertions were made **delta-based** rather than absolute so the suite is
+re-runnable against one long-lived server (counters are cumulative).
