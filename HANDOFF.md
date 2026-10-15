@@ -149,7 +149,7 @@ Commit: `chore: phase 0 — research, branch setup, Herdr orchestration`.
 
 ## Phase 1: Double-Entry Ledger
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-15T17:35:53Z — 12cdbfa`
 
 ### Dependencies
 
@@ -503,7 +503,7 @@ Update status marker. Commit: `docs: performance write-ups and API documentation
 | Phase | Status | Commit SHA | Timestamp |
 |---|---|---|---|
 | 0 — Research & Setup | `DONE` | `c5b9ade` | 2026-10-15T22:59:00Z |
-| 1 — Ledger | `NOT STARTED` | | |
+| 1 — Ledger | `DONE` | `12cdbfa` | 2026-10-15T17:35:53Z |
 | 2 — Idempotency | `NOT STARTED` | | |
 | 3 — Webhooks | `NOT STARTED` | | |
 | 4 — Saga | `NOT STARTED` | | |
