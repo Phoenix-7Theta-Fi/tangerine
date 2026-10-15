@@ -101,7 +101,7 @@ Every correctness invariant (ledger balance, inventory non-negativity, order tra
 
 ## Phase 0: Research, Environment, and Branch Setup
 
-**Status:** `DONE — 2026-10-15T22:59:00Z`
+**Status:** `DONE — 2026-10-15T22:59:00Z — c5b9ade`
 
 ### Dependencies
 
@@ -502,7 +502,7 @@ Update status marker. Commit: `docs: performance write-ups and API documentation
 
 | Phase | Status | Commit SHA | Timestamp |
 |---|---|---|---|
-| 0 — Research & Setup | `NOT STARTED` | | |
+| 0 — Research & Setup | `DONE` | `c5b9ade` | 2026-10-15T22:59:00Z |
 | 1 — Ledger | `NOT STARTED` | | |
 | 2 — Idempotency | `NOT STARTED` | | |
 | 3 — Webhooks | `NOT STARTED` | | |
