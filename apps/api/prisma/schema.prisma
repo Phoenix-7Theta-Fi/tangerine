@@ -669,3 +669,34 @@ model OrderStateTransition {
 
   @@index([orderId, createdAt])
 }
+
+/// ─────────────────────────────────────────────────────────────────────────
+/// Saga orchestration (see §saga). Durable step progress so a long-running
+/// checkout can be inspected, retried, or compensated after a crash.
+/// ─────────────────────────────────────────────────────────────────────────
+
+enum SagaStatus {
+  RUNNING
+  COMPLETED
+  COMPENSATING
+  FAILED
+}
+
+model SagaState {
+  id               String     @id @default(cuid())
+  sagaType         String
+  status           SagaStatus @default(RUNNING)
+  /// Step currently executing (null when idle/terminal).
+  currentStep      String?
+  /// Names of steps whose forward action committed, in order.
+  completedSteps   Json       @default("[]")
+  /// Names of compensations applied, in order.
+  compensationsRun Json       @default("[]")
+  /// Saga input + accumulated step output (e.g. the payment id to refund).
+  context          Json
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([sagaType, status])
+  @@index([status, updatedAt])
+}

@@ -99,6 +99,20 @@ export class MetricsService implements OnModuleInit {
     registers: [this.registry],
   });
 
+  readonly sagaRuns = new Counter({
+    name: 'tangerine_saga_runs_total',
+    help: 'Saga executions that reached a terminal state, by type and status',
+    labelNames: ['saga_type', 'status'],
+    registers: [this.registry],
+  });
+
+  readonly sagaCompensations = new Counter({
+    name: 'tangerine_saga_compensations_total',
+    help: 'Compensating actions applied, by saga type and step',
+    labelNames: ['saga_type', 'step'],
+    registers: [this.registry],
+  });
+
   // ── Gauges updated at scrape time from Postgres / BullMQ ──────────────
   readonly outboxEvents = new Gauge({
     name: 'tangerine_outbox_events',

@@ -18,6 +18,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
 import { WebhookModule } from './webhooks/webhook.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
+import { SagaModule } from './saga/saga.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
 
@@ -41,6 +42,7 @@ import { HealthModule } from './health/health.module';
     IdempotencyModule,
     WebhookModule,
     MarketplaceModule,
+    SagaModule,
     MetricsModule,
     HealthModule,
   ],
