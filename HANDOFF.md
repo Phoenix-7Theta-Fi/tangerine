@@ -254,7 +254,7 @@ Update status marker. Commit: `feat(idempotency): atomic phases and recovery poi
 
 ## Phase 3: Webhook Ingestion
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-15T18:01:40Z — a1ed94d`
 
 ### Dependencies
 
@@ -505,7 +505,7 @@ Update status marker. Commit: `docs: performance write-ups and API documentation
 | 0 — Research & Setup | `DONE` | `c5b9ade` | 2026-10-15T22:59:00Z |
 | 1 — Ledger | `DONE` | `12cdbfa` | 2026-10-15T17:35:53Z |
 | 2 — Idempotency | `DONE` | `0f21f57` | 2026-10-15T17:42:29Z |
-| 3 — Webhooks | `NOT STARTED` | | |
+| 3 — Webhooks | `DONE` | `a1ed94d` | 2026-10-15T18:01:40Z |
 | 4 — Saga | `NOT STARTED` | | |
 | 5 — Marketplace | `NOT STARTED` | | |
 | 6 — Integration | `NOT STARTED` | | |
