@@ -206,7 +206,7 @@ Update the status marker. Commit: `feat(ledger): double-entry ledger with deferr
 
 ## Phase 2: Idempotency with Recovery Points
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-15T17:42:29Z — 0f21f57`
 
 ### Dependencies
 
@@ -504,7 +504,7 @@ Update status marker. Commit: `docs: performance write-ups and API documentation
 |---|---|---|---|
 | 0 — Research & Setup | `DONE` | `c5b9ade` | 2026-10-15T22:59:00Z |
 | 1 — Ledger | `DONE` | `12cdbfa` | 2026-10-15T17:35:53Z |
-| 2 — Idempotency | `NOT STARTED` | | |
+| 2 — Idempotency | `DONE` | `0f21f57` | 2026-10-15T17:42:29Z |
 | 3 — Webhooks | `NOT STARTED` | | |
 | 4 — Saga | `NOT STARTED` | | |
 | 5 — Marketplace | `NOT STARTED` | | |
