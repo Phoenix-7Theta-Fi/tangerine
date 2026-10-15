@@ -67,6 +67,9 @@ print(f"t={t},v1={v1}")
 PY
 }
 SIG="$(sign "$TMP/event.json")"
+metric() { curl -fsS "$API_URL/api/metrics" | awk -v m="$1" '$1==m{print $2}'; }
+PROC_METRIC='tangerine_webhook_events_total{source="stripe",type="payment_intent.succeeded",outcome="processed"}'
+BASE_PROC="$(metric "$PROC_METRIC")"; BASE_PROC="${BASE_PROC:-0}"
 
 # ── 1. correct signature accepted ────────────────────────────────────────
 CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/webhooks/stripe" \
@@ -97,8 +100,8 @@ check "exactly ONE ledger transaction (got $TX)" "$([ "$TX" = "1" ] && echo 1 ||
 STATUS="$(psql_q "SELECT status FROM \"Payment\" WHERE \"externalId\"='$PI';")"
 check "payment status SUCCEEDED (got $STATUS)" "$([ "$STATUS" = "SUCCEEDED" ] && echo 1 || echo 0)"
 
-PROC="$(curl -fsS "$API_URL/api/metrics" | awk '/^tangerine_webhook_events_total\{source="stripe",type="payment_intent.succeeded",outcome="processed"\}/{print $2}')"
-check "exactly ONE delivery counted processed (got ${PROC:-0})" "$([ "$PROC" = "1" ] && echo 1 || echo 0)"
+PROC="$(metric "$PROC_METRIC")"; PROC="${PROC:-0}"
+check "exactly ONE delivery counted processed (delta $((PROC-BASE_PROC)))" "$([ "$((PROC-BASE_PROC))" = "1" ] && echo 1 || echo 0)"
 
 # ── 3. bad signature rejected, nothing ingested ──────────────────────────
 BADCODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/webhooks/stripe" \

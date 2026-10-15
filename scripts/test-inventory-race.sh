@@ -46,6 +46,9 @@ PID="$(printf '%s' "$PROD" | jqget id)"
 echo "product=$PID  stock=$STOCK"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+metric() { curl -fsS "$API_URL/api/metrics" | awk -v m="$1" '$1==m{print $2}'; }
+BASE_RES="$(metric 'tangerine_inventory_reservations_total{outcome="reserved"}')"; BASE_RES="${BASE_RES:-0}"
+BASE_REJ="$(metric 'tangerine_inventory_reservations_total{outcome="rejected"}')"; BASE_REJ="${BASE_REJ:-0}"
 START=$(date +%s.%N)
 for i in $(seq 1 "$N"); do
   ( curl -s -o "$TMP/$i" -w '%{http_code}' -X POST \
@@ -67,10 +70,10 @@ check "reserved == $STOCK and quantity == $STOCK (got $ROW)" \
 LEQ="$(psql_q "SELECT CASE WHEN reserved <= quantity THEN 1 ELSE 0 END FROM \"InventoryItem\" WHERE \"productId\"='$PID';")"
 check "invariant reserved <= quantity (got $LEQ)" "$([ "$LEQ" = "1" ] && echo 1 || echo 0)"
 
-RES="$(curl -fsS "$API_URL/api/metrics" | awk '/^tangerine_inventory_reservations_total\{outcome="reserved"\}/{print $2}')"
-REJ="$(curl -fsS "$API_URL/api/metrics" | awk '/^tangerine_inventory_reservations_total\{outcome="rejected"\}/{print $2}')"
-check "metric reserved=$STOCK, rejected=$((N-STOCK)) (got $RES/$REJ)" \
-  "$([ "$RES" = "$STOCK" ] && [ "$REJ" = "$((N-STOCK))" ] && echo 1 || echo 0)"
+RES="$(metric 'tangerine_inventory_reservations_total{outcome="reserved"}')"; RES="${RES:-0}"
+REJ="$(metric 'tangerine_inventory_reservations_total{outcome="rejected"}')"; REJ="${REJ:-0}"
+check "metric deltas reserved=$STOCK, rejected=$((N-STOCK)) (got $((RES-BASE_RES))/$((REJ-BASE_REJ)))" \
+  "$([ "$((RES-BASE_RES))" = "$STOCK" ] && [ "$((REJ-BASE_REJ))" = "$((N-STOCK))" ] && echo 1 || echo 0)"
 
 echo
 echo "=== result: $pass passed, $fail failed ==="

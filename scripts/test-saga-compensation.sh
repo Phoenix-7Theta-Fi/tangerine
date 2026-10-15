@@ -43,6 +43,11 @@ fi
 
 USER_ID="$(curl -fsS "$API_URL/api/session/identities" | python3 -c 'import sys,json;print(json.load(sys.stdin)[0]["id"])')"
 [ -n "$USER_ID" ] || { echo "could not resolve identity"; exit 1; }
+metric() { curl -fsS "$API_URL/api/metrics" | awk -v m="$1" '$1==m{print $2}'; }
+MC1_METRIC='tangerine_saga_compensations_total{saga_type="checkout",step="reserve-inventory"}'
+MC2_METRIC='tangerine_saga_compensations_total{saga_type="checkout",step="charge-payment"}'
+BASE_MC1="$(metric "$MC1_METRIC")"; BASE_MC1="${BASE_MC1:-0}"
+BASE_MC2="$(metric "$MC2_METRIC")"; BASE_MC2="${BASE_MC2:-0}"
 
 PID="$(curl -fsS -X POST "$API_URL/api/marketplace/products" -H 'content-type: application/json' -H "x-user-id: $USER_ID" \
   -d '{"name":"Saga Widget","priceCents":400,"quantity":5}' | jqget id)"
@@ -84,9 +89,10 @@ check "payment refunded (got $PAY)" "$([ "$PAY" = "REFUNDED" ] && echo 1 || echo
 ORD="$(psql_q "SELECT status FROM \"Order\" WHERE id='$OID';")"
 check "order cancelled (got $ORD)" "$([ "$ORD" = "CANCELLED" ] && echo 1 || echo 0)"
 
-MC="$(curl -fsS "$API_URL/api/metrics" | awk '/^tangerine_saga_compensations_total\{saga_type="checkout",step="reserve-inventory"\}/{print $2}')"
-MC2="$(curl -fsS "$API_URL/api/metrics" | awk '/^tangerine_saga_compensations_total\{saga_type="checkout",step="charge-payment"\}/{print $2}')"
-check "compensation metrics for steps 1 and 2 (got $MC/$MC2)" "$([ "$MC" = "1" ] && [ "$MC2" = "1" ] && echo 1 || echo 0)"
+MC="$(metric "$MC1_METRIC")"; MC="${MC:-0}"
+MC2="$(metric "$MC2_METRIC")"; MC2="${MC2:-0}"
+check "compensation metrics for steps 1 and 2 (deltas $((MC-BASE_MC1))/$((MC2-BASE_MC2)))" \
+  "$([ "$((MC-BASE_MC1))" = "1" ] && [ "$((MC2-BASE_MC2))" = "1" ] && echo 1 || echo 0)"
 
 # ── Part B: clean checkout completes ─────────────────────────────────────
 V="$(cart_version)"
