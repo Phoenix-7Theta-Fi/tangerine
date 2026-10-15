@@ -97,7 +97,7 @@ model User {
   bookingsAsPractitioner Booking[]            @relation("practitionerBookings")
   bookingsAsMember       Booking[]            @relation("memberBookings")
   bookingOperations      BookingOperation[]
-  idempotencyKeys        IdempotencyKey[]
+  payments               Payment[]
 
   @@index([isCelebrity])
 }
@@ -440,9 +440,11 @@ enum IdempotencyStatus {
 
 model IdempotencyKey {
   id             String            @id @default(cuid())
+  /// Owning scope: a real user id for user-triggered writes, or a namespace
+  /// like "stripe" for provider-triggered work. Not a foreign key: webhook
+  /// processing has no authenticated user.
   userId         String
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// Caller-supplied key, unique per user.
+  /// Caller-supplied key, unique within `userId`.
   key            String
   /// SHA-256 of the canonical request; reuse with a different payload is a 409.
   requestHash    String
@@ -463,4 +465,73 @@ model IdempotencyKey {
   @@unique([userId, key])
   @@index([status, lockedAt])
   @@index([expiresAt])
+}
+
+/// ─────────────────────────────────────────────────────────────────────────
+/// Webhook ingestion + payments (see docs/research/…§webhooks).
+///
+/// Webhooks are delivered at-least-once, out of order, and sometimes twice.
+/// The inbox row (unique on source + externalEventId) makes ingestion
+/// idempotent; the Payment state machine makes application order-independent.
+/// ─────────────────────────────────────────────────────────────────────────
+
+/// Lifecycle of an inbound webhook, from receipt to application.
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+/// Transactional inbox: one row per provider event ever seen.
+model WebhookEvent {
+  id              String             @id @default(cuid())
+  source          String
+  externalEventId String
+  type            String
+  payload         Json
+  status          WebhookEventStatus @default(RECEIVED)
+  receivedAt      DateTime           @default(now())
+  processedAt     DateTime?
+
+  /// At-least-once delivery: exactly one row per (source, event id).
+  @@unique([source, externalEventId])
+  @@index([status, receivedAt])
+}
+
+/// Payment lifecycle. Minimal in Phase 3; Phase 5 links it to an Order.
+enum PaymentStatus {
+  CREATED
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  /// Provider id, e.g. a Stripe PaymentIntent id ("pi_…").
+  externalId  String        @unique
+  ownerId     String?
+  owner       User?         @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  status      PaymentStatus @default(CREATED)
+  amountCents Int
+  currency    String        @default("USD")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  transitions PaymentStateTransition[]
+
+  @@index([status, updatedAt])
+}
+
+/// Auditable record of every applied status change (no rows for no-ops).
+model PaymentStateTransition {
+  id         String        @id @default(cuid())
+  paymentId  String
+  payment    Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  fromStatus PaymentStatus?
+  toStatus   PaymentStatus
+  eventType  String
+  createdAt  DateTime      @default(now())
+
+  @@index([paymentId, createdAt])
 }

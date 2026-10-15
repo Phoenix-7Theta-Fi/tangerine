@@ -13,10 +13,12 @@ import type { AppConfig } from './config/configuration';
 
 async function bootstrap(): Promise<void> {
   const adapter = new FastifyAdapter({ logger: false });
+  // rawBody: true preserves the exact request bytes for signature verification
+  // (Stripe signs the raw payload, so a JSON re-serialization would break it).
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     adapter,
-    { bufferLogs: true },
+    { bufferLogs: true, rawBody: true },
   );
 
   app.setGlobalPrefix('api');

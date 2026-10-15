@@ -17,6 +17,12 @@ export interface AppConfig {
   bookingHoldSweepIntervalMs: number;
   /** Notice (hours) inside which a cancellation is flagged as late. */
   bookingCancelNoticeHours: number;
+  /** Stripe secret key (used to build the client / verify webhooks). */
+  stripeSecretKey: string;
+  /** Stripe endpoint secret used to verify webhook signatures. */
+  stripeWebhookSecret: string;
+  /** Tolerance (seconds) for a webhook signature timestamp. */
+  stripeWebhookTolerance: number;
 }
 
 export default (): AppConfig => ({
@@ -41,6 +47,13 @@ export default (): AppConfig => ({
   ),
   bookingCancelNoticeHours: parseInt(
     process.env.BOOKING_CANCEL_NOTICE_HOURS ?? '24',
+    10,
+  ),
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? 'sk_test_dev',
+  stripeWebhookSecret:
+    process.env.STRIPE_WEBHOOK_SECRET ?? 'whsec_dev_test_secret',
+  stripeWebhookTolerance: parseInt(
+    process.env.STRIPE_WEBHOOK_TOLERANCE ?? '300',
     10,
   ),
 });

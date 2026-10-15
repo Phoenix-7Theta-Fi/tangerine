@@ -72,6 +72,13 @@ export class MetricsService implements OnModuleInit {
     registers: [this.registry],
   });
 
+  readonly webhookEvents = new Counter({
+    name: 'tangerine_webhook_events_total',
+    help: 'Inbound webhook events, by source, type, and outcome',
+    labelNames: ['source', 'type', 'outcome'],
+    registers: [this.registry],
+  });
+
   // ── Gauges updated at scrape time from Postgres / BullMQ ──────────────
   readonly outboxEvents = new Gauge({
     name: 'tangerine_outbox_events',
@@ -108,6 +115,12 @@ export class MetricsService implements OnModuleInit {
   readonly ledgerBalanceImbalanceCents = new Gauge({
     name: 'tangerine_ledger_balance_imbalance_cents',
     help: 'Global debit-minus-credit imbalance across all ledger postings (must always be 0)',
+    registers: [this.registry],
+  });
+
+  readonly ordersStuckPending = new Gauge({
+    name: 'tangerine_orders_stuck_pending',
+    help: 'Orders left PENDING without reaching PAID (must always be 0)',
     registers: [this.registry],
   });
 

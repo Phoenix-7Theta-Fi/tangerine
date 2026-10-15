@@ -16,6 +16,7 @@ import { ChatModule } from './chat/chat.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
+import { WebhookModule } from './webhooks/webhook.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
 
@@ -37,6 +38,7 @@ import { HealthModule } from './health/health.module';
     SchedulingModule,
     LedgerModule,
     IdempotencyModule,
+    WebhookModule,
     MetricsModule,
     HealthModule,
   ],

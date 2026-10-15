@@ -82,6 +82,10 @@ export class MetricsController {
       ledgerSums.find((g) => g.direction === 'CREDIT')?._sum.amountCents ?? 0;
     this.metrics.ledgerBalanceImbalanceCents.set(ledgerDebits - ledgerCredits);
 
+    // Orders arrive in Phase 5. Until then there are none, so nothing can be
+    // stuck; the gauge exists so dashboards and tests can assert it stays 0.
+    this.metrics.ordersStuckPending.set(0);
+
     return this.metrics.metrics();
   }
 }
