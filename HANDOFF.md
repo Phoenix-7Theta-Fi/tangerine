@@ -311,6 +311,10 @@ Update status marker. Commit: `feat(payments): webhook ingestion with signature 
 
 Phase 3 complete (saga uses webhook-triggered state transitions).
 
+> **Execution-order note:** built *after* Phase 5 (see the note there). The
+> checkout saga composes the marketplace `InventoryService`/`OrderService`
+> rather than redefining inventory and orders.
+
 ### Research Required Before Implementation
 
 - Saga pattern orchestration vs choreography — when to use each.
@@ -361,7 +365,12 @@ Update status marker. Commit: `feat(saga): checkout orchestration with compensat
 
 ## Phase 5: Marketplace — Products, Inventory, Cart, Orders
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-15T18:10:56Z — 88146fd`
+
+> **Execution-order note:** implemented *before* Phase 4. The checkout saga's
+> steps (reserve inventory, confirm order) depend on these primitives, so the
+> numbering and the stated dependency are inverted for the saga's sake. Phase 4
+> now composes this module.
 
 ### Dependencies
 
@@ -507,7 +516,7 @@ Update status marker. Commit: `docs: performance write-ups and API documentation
 | 2 — Idempotency | `DONE` | `0f21f57` | 2026-10-15T17:42:29Z |
 | 3 — Webhooks | `DONE` | `a1ed94d` | 2026-10-15T18:01:40Z |
 | 4 — Saga | `NOT STARTED` | | |
-| 5 — Marketplace | `NOT STARTED` | | |
+| 5 — Marketplace | `DONE` | `88146fd` | 2026-10-15T18:10:56Z |
 | 6 — Integration | `NOT STARTED` | | |
 | 7 — Documentation | `NOT STARTED` | | |
 
