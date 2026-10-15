@@ -305,7 +305,7 @@ Update status marker. Commit: `feat(payments): webhook ingestion with signature 
 
 ## Phase 4: Saga Orchestration for Checkout
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-15T18:18:04Z — 16178f4`
 
 ### Dependencies
 
@@ -515,7 +515,7 @@ Update status marker. Commit: `docs: performance write-ups and API documentation
 | 1 — Ledger | `DONE` | `12cdbfa` | 2026-10-15T17:35:53Z |
 | 2 — Idempotency | `DONE` | `0f21f57` | 2026-10-15T17:42:29Z |
 | 3 — Webhooks | `DONE` | `a1ed94d` | 2026-10-15T18:01:40Z |
-| 4 — Saga | `NOT STARTED` | | |
+| 4 — Saga | `DONE` | `16178f4` | 2026-10-15T18:18:04Z |
 | 5 — Marketplace | `DONE` | `88146fd` | 2026-10-15T18:10:56Z |
 | 6 — Integration | `NOT STARTED` | | |
 | 7 — Documentation | `NOT STARTED` | | |
