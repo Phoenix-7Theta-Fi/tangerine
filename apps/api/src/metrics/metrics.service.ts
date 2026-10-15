@@ -79,6 +79,26 @@ export class MetricsService implements OnModuleInit {
     registers: [this.registry],
   });
 
+  readonly inventoryReservations = new Counter({
+    name: 'tangerine_inventory_reservations_total',
+    help: 'Inventory reservation attempts, by outcome',
+    labelNames: ['outcome'],
+    registers: [this.registry],
+  });
+
+  readonly cartConflicts = new Counter({
+    name: 'tangerine_cart_conflicts_total',
+    help: 'Cart edits rejected by optimistic-locking version mismatch',
+    registers: [this.registry],
+  });
+
+  readonly orderTransitions = new Counter({
+    name: 'tangerine_order_transitions_total',
+    help: 'Order status transition attempts, by from/to and legality',
+    labelNames: ['from', 'to', 'legal'],
+    registers: [this.registry],
+  });
+
   // ── Gauges updated at scrape time from Postgres / BullMQ ──────────────
   readonly outboxEvents = new Gauge({
     name: 'tangerine_outbox_events',

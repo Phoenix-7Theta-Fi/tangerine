@@ -98,6 +98,9 @@ model User {
   bookingsAsMember       Booking[]            @relation("memberBookings")
   bookingOperations      BookingOperation[]
   payments               Payment[]
+  products               Product[]            @relation("practitionerProducts")
+  cart                   Cart?
+  orders                 Order[]              @relation("memberOrders")
 
   @@index([isCelebrity])
 }
@@ -534,4 +537,135 @@ model PaymentStateTransition {
   createdAt  DateTime      @default(now())
 
   @@index([paymentId, createdAt])
+}
+
+/// ─────────────────────────────────────────────────────────────────────────
+/// Marketplace: products, inventory, cart, orders (see §marketplace).
+///
+/// Inventory is the contested resource: many checkouts race for few units.
+/// A single conditional UPDATE per reservation keeps contention on one row,
+/// and `reserved` can never exceed `quantity` (the predicate enforces it).
+/// ─────────────────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLING
+  SHIPPED
+  DELIVERED
+  RETURNED
+  REFUNDED
+  CANCELLED
+}
+
+enum OrderActorRole {
+  MEMBER
+  PRACTITIONER
+  SYSTEM
+}
+
+model Product {
+  id                     String     @id @default(cuid())
+  practitionerId         String
+  practitioner           User       @relation("practitionerProducts", fields: [practitionerId], references: [id], onDelete: Cascade)
+  name                   String
+  description            String?
+  priceCents             Int
+  currency               String     @default("USD")
+  category               String?
+  active                 Boolean    @default(true)
+  isSponsored            Boolean    @default(false)
+  conflictOfInterestNote String?
+  createdAt              DateTime   @default(now())
+
+  inventory  InventoryItem?
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([practitionerId, active])
+  @@index([category, active])
+}
+
+model InventoryItem {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(0)
+  reserved  Int      @default(0)
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  /// reserved can never exceed quantity; the reserve predicate guarantees it.
+  @@index([productId])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version   Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  items     CartItem[]
+}
+
+model CartItem {
+  id            String    @id @default(cuid())
+  cartId        String
+  cart          Cart      @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Int
+  /// Soft hold deadline for the checkout window; expired lines are swept.
+  reservedUntil DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([cartId, productId])
+  @@index([reservedUntil])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  memberId        String
+  member          User        @relation("memberOrders", fields: [memberId], references: [id], onDelete: Cascade)
+  status          OrderStatus @default(PENDING)
+  totalCents      Int
+  currency        String      @default("USD")
+  paymentId       String?
+  shippingAddress Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items       OrderItem[]
+  transitions OrderStateTransition[]
+
+  @@index([memberId, createdAt])
+  @@index([status, updatedAt])
+}
+
+/// Line snapshot: name and unit price are frozen at checkout time.
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName    String
+  quantity       Int
+  unitPriceCents Int
+
+  @@index([orderId])
+}
+
+model OrderStateTransition {
+  id         String         @id @default(cuid())
+  orderId    String
+  order      Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  actorRole  OrderActorRole
+  actorId    String?
+  createdAt  DateTime       @default(now())
+
+  @@index([orderId, createdAt])
 }
