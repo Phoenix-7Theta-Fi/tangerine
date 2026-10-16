@@ -117,7 +117,7 @@ This document deliberately contains no code snippets, no file paths, no director
 
 ## Phase 0: Research, Environment, and Branch Setup
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-16T04:56:37Z — c7fde3c`
 
 ### Dependencies
 
@@ -447,7 +447,7 @@ Update the status marker. Commit the integration, documentation, and final verif
 
 | Phase | Status | Commit SHA | Timestamp |
 |---|---|---|---|
-| 0 — Research & Setup | `NOT STARTED` | | |
+| 0 — Research & Setup | `DONE` | `c7fde3c` | `2026-10-16T04:56:37Z` |
 | 1 — Data Foundation | `NOT STARTED` | | |
 | 2 — Derivation Layer | `NOT STARTED` | | |
 | 3 — Ingestion Pipeline | `NOT STARTED` | | |
