@@ -166,7 +166,7 @@ Commit the research memo, branch setup, and Herdr orchestration configuration.
 
 ## Phase 1: Data Foundation — Clinical Events, Observations, and Reference Ranges
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-16T05:03:41Z — a6d91e4`
 
 ### Dependencies
 
@@ -448,7 +448,7 @@ Update the status marker. Commit the integration, documentation, and final verif
 | Phase | Status | Commit SHA | Timestamp |
 |---|---|---|---|
 | 0 — Research & Setup | `DONE` | `c7fde3c` | `2026-10-16T04:56:37Z` |
-| 1 — Data Foundation | `NOT STARTED` | | |
+| 1 — Data Foundation | `DONE` | `a6d91e4` | `2026-10-16T05:03:41Z` |
 | 2 — Derivation Layer | `NOT STARTED` | | |
 | 3 — Ingestion Pipeline | `NOT STARTED` | | |
 | 4 — Benchmarking | `NOT STARTED` | | |
