@@ -15,6 +15,7 @@
     "prisma:reset": "prisma migrate reset --force",
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
+    "synthetic:health": "node prisma/synthetic/generate-health-seed.mjs",
     "perf:seed-bookings": "ts-node --project performance/tsconfig.json performance/seed-bookings.ts",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand --forceExit"

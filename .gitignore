@@ -9,3 +9,4 @@ coverage/
 .vite/
 apps/web/dist/
 apps/api/dist/
+.herdr-health.env
