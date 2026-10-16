@@ -10,12 +10,15 @@ import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { FANOUT_QUEUE } from '../queue/queue.module';
+import { FANOUT_QUEUE, HEALTH_QUEUE } from '../queue/queue.module';
 import type { AppConfig } from '../config/configuration';
 
 export const POST_CREATED = 'post.created';
 export const BOOKING_CONFIRMED = 'booking.confirmed';
 export const BOOKING_CANCELLED = 'booking.cancelled';
+export const HEALTH_OBSERVATION_INGESTED = 'health.observation.ingested';
+export const HEALTH_ADHERENCE_LOGGED = 'health.adherence.logged';
+export const HEALTH_RANGE_ALERT = 'health.range.alert';
 
 export interface PostCreatedPayload {
   postId: string;
@@ -63,6 +66,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(FANOUT_QUEUE) private readonly queue: Queue,
+    @InjectQueue(HEALTH_QUEUE) private readonly healthQueue: Queue,
     config: ConfigService<AppConfig, true>,
   ) {
     this.intervalMs = config.get('outboxRelayIntervalMs', { infer: true });
@@ -111,7 +115,11 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
         `;
 
         for (const row of rows) {
-          await this.queue.add(
+          // Route by event family: health ingestions go to the health worker,
+          // everything else to fan-out. Same outbox, same relay, same
+          // crash-safety; the queue is just the consumer's address.
+          const target = row.type.startsWith('health.') ? this.healthQueue : this.queue;
+          await target.add(
             row.type,
             { eventId: row.id, payload: row.payload },
             {

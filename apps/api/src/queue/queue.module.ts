@@ -5,6 +5,7 @@ import type { AppConfig } from '../config/configuration';
 import { bullConnectionFromUrl } from './redis-connection';
 
 export const FANOUT_QUEUE = 'fanout';
+export const HEALTH_QUEUE = 'health';
 
 /**
  * Registers the BullMQ root connection and the fan-out queue once, globally, so
@@ -21,6 +22,7 @@ export const FANOUT_QUEUE = 'fanout';
       }),
     }),
     BullModule.registerQueue({ name: FANOUT_QUEUE }),
+    BullModule.registerQueue({ name: HEALTH_QUEUE }),
   ],
   exports: [BullModule],
 })

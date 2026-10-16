@@ -1,5 +1,17 @@
-import { Controller, Get, NotFoundException, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Sex } from '@prisma/client';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { AuthUser, CurrentUser } from '../common/decorators/current-user.decorator';
@@ -8,7 +20,14 @@ import { AdherenceService } from './adherence.service';
 import { ProtocolService } from './protocol.service';
 import { ReferenceRangeService } from './reference-range.service';
 import { TrendService } from './trend.service';
-import { AdherenceQueryDto, ProgressQueryDto, TrendQueryDto } from './dto/clinical.dto';
+import { HealthIngestionService } from './health-ingestion.service';
+import {
+  AdherenceQueryDto,
+  IngestAdherenceDto,
+  IngestObservationDto,
+  ProgressQueryDto,
+  TrendQueryDto,
+} from './dto/clinical.dto';
 
 const DAY_MS = 86400000;
 
@@ -28,7 +47,53 @@ export class ClinicalController {
     private readonly protocols: ProtocolService,
     private readonly ranges: ReferenceRangeService,
     private readonly prisma: PrismaService,
+    private readonly ingestion: HealthIngestionService,
   ) {}
+
+  private requireKey(key: string | undefined): string {
+    if (!key || !key.trim()) {
+      throw new BadRequestException('idempotency-key header is required');
+    }
+    return key.trim();
+  }
+
+  @Post('ingest/fhir')
+  @HttpCode(202)
+  @ApiHeader({ name: 'idempotency-key', required: true })
+  @ApiOperation({
+    summary: 'Ingest a FHIR R4 Bundle (verify, extract, write), exactly-once per key',
+  })
+  ingestFhir(
+    @CurrentUser() user: AuthUser,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body() bundle: unknown,
+  ) {
+    return this.ingestion.ingestFhirBundle(user, bundle, this.requireKey(key));
+  }
+
+  @Post('observations')
+  @HttpCode(202)
+  @ApiHeader({ name: 'idempotency-key', required: true })
+  @ApiOperation({ summary: 'Ingest a single observation, exactly-once per key' })
+  ingestObservation(
+    @CurrentUser() user: AuthUser,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body() dto: IngestObservationDto,
+  ) {
+    return this.ingestion.ingestObservation(user, dto, this.requireKey(key));
+  }
+
+  @Post('adherence-events')
+  @HttpCode(202)
+  @ApiHeader({ name: 'idempotency-key', required: true })
+  @ApiOperation({ summary: 'Ingest a single adherence event, exactly-once per key' })
+  ingestAdherence(
+    @CurrentUser() user: AuthUser,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body() dto: IngestAdherenceDto,
+  ) {
+    return this.ingestion.ingestAdherence(user, dto, this.requireKey(key));
+  }
 
   @Get('trends')
   @ApiOperation({

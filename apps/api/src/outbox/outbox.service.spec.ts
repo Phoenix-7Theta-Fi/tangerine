@@ -15,12 +15,19 @@ describe('OutboxService', () => {
       outboxEvent: { create: jest.fn().mockResolvedValue({}) },
     };
     const queue: any = { add: jest.fn().mockResolvedValue({}) };
+    const healthQueue: any = { add: jest.fn().mockResolvedValue({}) };
     const config: any = {
       get: jest.fn((key: string) =>
         key === 'outboxRelayIntervalMs' ? 500 : 200,
       ),
     };
-    return { service: new OutboxService(prisma, queue, config), prisma, queue, tx };
+    return {
+      service: new OutboxService(prisma, queue, healthQueue, config),
+      prisma,
+      queue,
+      healthQueue,
+      tx,
+    };
   }
 
   it('emits an event through the caller transaction', async () => {
@@ -63,5 +70,25 @@ describe('OutboxService', () => {
     // The second concurrent call is rejected by the re-entrancy guard.
     expect(queue.add).toHaveBeenCalledTimes(2);
     expect(a).toBe(2);
+  });
+
+  it('routes health events to the health queue', async () => {
+    const { service, queue, healthQueue } = build();
+    (service as any).prisma = {
+      $transaction: jest.fn(async (cb: (t: unknown) => unknown) =>
+        cb({
+          $queryRaw: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 'evt-h', type: 'health.observation.ingested', payload: { patientId: 'u1' } },
+            ]),
+          outboxEvent: { update: jest.fn().mockResolvedValue({}) },
+        }),
+      ),
+    };
+    const count = await service.relayOnce();
+    expect(count).toBe(1);
+    expect(healthQueue.add).toHaveBeenCalledTimes(1);
+    expect(queue.add).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsISO8601, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsISO8601,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
+import { AdherenceEventType, ObservationCategory } from '@prisma/client';
 
 export class TrendQueryDto {
   /** Lookback interval, in days, for the comparison value. */
@@ -43,4 +53,79 @@ export class ProgressQueryDto {
   @IsOptional()
   @IsISO8601()
   asOf?: string;
+}
+
+export class IngestObservationDto {
+  @IsEnum(ObservationCategory)
+  category!: ObservationCategory;
+
+  @IsString()
+  code!: string;
+
+  @IsOptional()
+  @IsString()
+  codeSystem?: string;
+
+  @IsOptional()
+  @IsString()
+  display?: string;
+
+  @IsOptional()
+  @IsNumber()
+  valueNumeric?: number;
+
+  @IsOptional()
+  @IsString()
+  valueString?: string;
+
+  @IsOptional()
+  @IsString()
+  valueCode?: string;
+
+  @IsOptional()
+  @IsString()
+  valueUnit?: string;
+
+  @IsISO8601()
+  effectiveAt!: string;
+
+  @IsOptional()
+  @IsISO8601()
+  issuedAt?: string;
+
+  /** Stable source id; defaults to the idempotency key. */
+  @IsOptional()
+  @IsString()
+  sourceId?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
+
+  @IsOptional()
+  @IsString()
+  encounterId?: string;
+}
+
+export class IngestAdherenceDto {
+  @IsEnum(AdherenceEventType)
+  type!: AdherenceEventType;
+
+  @IsString()
+  protocolItemKey!: string;
+
+  @IsISO8601()
+  occurredAt!: string;
+
+  @IsOptional()
+  @IsNumber()
+  valueNumeric?: number;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceId?: string;
 }
