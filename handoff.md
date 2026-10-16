@@ -316,7 +316,7 @@ Update the status marker. Commit the ingestion pipeline, idempotency integration
 
 ## Phase 4: Benchmarking — Trend Query, Adherence Rate, and Ingestion Throughput
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-16T05:41:23Z — 684191b`
 
 ### Dependencies
 
@@ -451,7 +451,7 @@ Update the status marker. Commit the integration, documentation, and final verif
 | 1 — Data Foundation | `DONE` | `a6d91e4` | `2026-10-16T05:03:41Z` |
 | 2 — Derivation Layer | `DONE` | `646a6c2` | `2026-10-16T05:06:40Z` |
 | 3 — Ingestion Pipeline | `DONE` | `ee30445` | `2026-10-16T05:21:40Z` |
-| 4 — Benchmarking | `NOT STARTED` | | |
+| 4 — Benchmarking | `DONE` | `684191b` | `2026-10-16T05:41:23Z` |
 | 5 — Adversarial Testing | `NOT STARTED` | | |
 | 6 — Integration & Documentation | `NOT STARTED` | | |
 
