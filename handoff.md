@@ -264,7 +264,7 @@ Update the status marker. Commit the derivation services, adherence event store,
 
 ## Phase 3: Ingestion Pipeline — FHIR, Device Data, and Manual Entry
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-16T05:21:40Z — ee30445`
 
 ### Dependencies
 
@@ -450,7 +450,7 @@ Update the status marker. Commit the integration, documentation, and final verif
 | 0 — Research & Setup | `DONE` | `c7fde3c` | `2026-10-16T04:56:37Z` |
 | 1 — Data Foundation | `DONE` | `a6d91e4` | `2026-10-16T05:03:41Z` |
 | 2 — Derivation Layer | `DONE` | `646a6c2` | `2026-10-16T05:06:40Z` |
-| 3 — Ingestion Pipeline | `NOT STARTED` | | |
+| 3 — Ingestion Pipeline | `DONE` | `ee30445` | `2026-10-16T05:21:40Z` |
 | 4 — Benchmarking | `NOT STARTED` | | |
 | 5 — Adversarial Testing | `NOT STARTED` | | |
 | 6 — Integration & Documentation | `NOT STARTED` | | |
