@@ -1,0 +1,21 @@
+Limit  (cost=7.17..10.67 rows=1 width=42) (actual time=0.194..0.205 rows=1.00 loops=1)
+  Buffers: shared hit=15
+  InitPlan 1
+    ->  Seq Scan on "PatientProfile"  (cost=0.00..3.25 rows=1 width=26) (actual time=0.032..0.037 rows=1.00 loops=1)
+          Filter: (mrn = 'MRN-PERF-t100000-health-final'::text)
+          Rows Removed by Filter: 110
+          Buffers: shared hit=2
+  ->  Incremental Sort  (cost=3.92..4709.16 rows=1344 width=42) (actual time=0.189..0.193 rows=1.00 loops=1)
+        Sort Key: "Observation"."effectiveAt" DESC, "Observation"."issuedAt" DESC NULLS LAST
+        Presorted Key: "Observation"."effectiveAt"
+        Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 25kB  Peak Memory: 25kB
+        Buffers: shared hit=15
+        ->  Index Scan Backward using "Observation_patientId_code_effectiveAt_idx" on "Observation"  (cost=0.42..4649.10 rows=1344 width=42) (actual time=0.105..0.109 rows=2.00 loops=1)
+              Index Cond: (("patientId" = (InitPlan 1).col1) AND (code = '8867-4'::text) AND ("effectiveAt" <= now()))
+              Index Searches: 1
+              Buffers: shared hit=9
+Planning:
+  Buffers: shared hit=273 read=32
+  I/O Timings: shared read=6.060
+Planning Time: 10.034 ms
+Execution Time: 0.360 ms

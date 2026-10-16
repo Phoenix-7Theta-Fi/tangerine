@@ -270,3 +270,69 @@ suite runs them **sequentially** (one Herdr tab per workload for output
 isolation); `PARALLEL=1` is available for disjoint-data setups. Two metric
 assertions were made **delta-based** rather than absolute so the suite is
 re-runnable against one long-lived server (counters are cumulative).
+
+---
+
+## 2026-10-16 — Health ingestion: index-flat trends, a worker ceiling, and a quadratic adherence filter
+
+**Scenario:** health monitoring — see `docs/performance/health-monitoring.md`.
+Artifacts: `results/health-final/` (before) and `results/health-after/`
+(adherence re-run).
+
+### Observation (before)
+
+Trend reads were flat (~8 ms p95 from 1k to 500k rows) — expected, because the
+recent window is a bounded backward walk of
+`Observation_patientId_code_effectiveAt_idx` (9 buffers, 0.088 ms; EXPLAIN in
+the write-up). Not a problem to solve.
+
+Adherence, however, grew superlinearly:
+
+| (items, events) | p95 | avg |
+| --- | --- | --- |
+| 20, 10,000 | 325 ms | 208 ms |
+| 50, 25,000 | 1,028 ms | 634 ms |
+| 100, 50,000 | 2,549 ms | 1,606 ms |
+
+Doubling both inputs roughly tripled latency.
+
+Ingestion accepted 137 req/s (4,118 reqs/30 s, 0 `5xx`) and the outbox drained in
+1.79 s — but across the run the accumulated backlog reached ~11k and drained at
+~100 events/s.
+
+### Hypothesis
+
+1. Adherence is **O(items × events)**: `AdherenceService` fetched the window's
+   events once and then ran `events.filter(e => e.protocolItemKey === item.key)`
+   *inside the per-item loop*.
+2. The pipeline's sustained ceiling is the **single `HealthProcessor` consumer**,
+   because it derives the trend (an extra read) for every observation before
+   marking the outbox row processed — so it consumes slower than the write path
+   produces.
+
+### Change
+
+Bucketed the window's events by `protocolItemKey` in one pass and had each item
+read its bucket (`apps/api/src/clinical/adherence.service.ts`). Semantics
+unchanged: taken / skipped / not-logged / streaks still read the same per-item
+event list.
+
+### Result (after)
+
+| (items, events) | avg before | avg after | p95 before | p95 after |
+| --- | --- | --- | --- | --- |
+| 20, 10,000 | 208 ms | **179 ms** | 325 ms | **283 ms** |
+| 50, 25,000 | 634 ms | **492 ms** | 1,028 ms | **667 ms** |
+| 100, 50,000 | 1,606 ms | **905 ms** | 2,549 ms | **1,311 ms** |
+
+1.77× throughput at the largest config; the remaining cost is linear in the
+returned window rows — the floor for a derived-on-read endpoint.
+
+### Diagnosed, not changed — worker throughput is the sustained ceiling
+
+The ingestion request path accepts ~137 req/s but the worker drains ~100
+events/s, so sustained ingestion above the drain rate grows the outbox
+unboundedly. The lever is **consumer concurrency** (BullMQ `Worker` concurrency,
+or sharding `health.observation.ingested` across workers), which is a deployment
+knob rather than a code defect; the scenario's purpose was to locate the ceiling.
+Recorded here as the recommended next change if sustained ingest rates increase.

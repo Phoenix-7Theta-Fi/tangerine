@@ -66,12 +66,22 @@ export class AdherenceService {
         })
       : [];
 
+    // Group the window's events by item once. Per-item `events.filter(...)`
+    // made this O(items × events); bucketing makes it O(events + items), which
+    // is what keeps the endpoint flat as the event volume grows.
+    const byKey = new Map<string, typeof events>();
+    for (const e of events) {
+      const bucket = byKey.get(e.protocolItemKey);
+      if (bucket) bucket.push(e);
+      else byKey.set(e.protocolItemKey, [e]);
+    }
+
     const out: ProtocolAdherence[] = [];
     for (const p of protocols) {
       const items: ItemAdherence[] = p.items
         .filter((i) => i.active)
         .map((item) => {
-          const mine = events.filter((e) => e.protocolItemKey === item.key);
+          const mine = byKey.get(item.key) ?? [];
           const takenList = mine.filter((e) => e.type === item.adherenceType);
           const skipped = mine.filter((e) => e.type === AdherenceEventType.MEDICATION_SKIPPED).length;
           const expected = item.expectedPerDay * windowDays;

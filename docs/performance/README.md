@@ -104,6 +104,18 @@ Behavioral harnesses (not k6) against the live API + Postgres; details in
 | Saga compensation | `test-saga-compensation.sh` / `test-saga-failure.sh` | measured | LIFO compensation; every step forced to fail |
 | Full suite | `herdr-test-suite.sh` | measured | **14/14 workloads green** |
 
+### Health monitoring (new capability)
+
+k6 scenarios against the live API; details in `health-monitoring.md`.
+
+| Scenario | Script | Status | Headline |
+| --- | --- | --- | --- |
+| Observation ingestion | `health-observation-ingestion.js` | measured | **137 req/s**, p95 300 ms, 0 `5xx`; outbox drained in 1.79 s |
+| FHIR bundle ingestion | `health-fhir-bundle-ingestion.js` | measured | **116 req/s** (×3 obs/bundle), p95 99 ms |
+| Concurrent sources | `health-concurrent-sources.js` | measured | **220 req/s**, p95 88 ms, 0 `5xx` |
+| Trend query scaling | `health-trend-query.js` | measured | flat **~8 ms p95** from 1k → 500k rows (index walk) |
+| Adherence rate scaling | `health-adherence-rate.js` | measured + optimized | p95 **2,549 → 1,311 ms** at 100 items / 50k events |
+
 ### Visuals
 
 ![Tangerine Grafana dashboard](assets/grafana-dashboard.png)
@@ -126,6 +138,13 @@ pnpm infra:up
 pnpm db:seed
 RUN_STAMP=local bash apps/api/performance/run-scheduling.sh
 node apps/api/performance/report.mjs apps/api/performance/results/local
+```
+
+Health scenarios:
+
+```bash
+pnpm --filter @tangerine/api prisma:seed-health
+RUN_STAMP=local bash apps/api/performance/run-health.sh
 ```
 
 Grafana dashboard: <http://localhost:3000/d/tangerine-api> (provisioned;
