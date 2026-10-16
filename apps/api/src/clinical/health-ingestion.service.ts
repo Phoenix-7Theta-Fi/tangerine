@@ -8,6 +8,7 @@ import {
 import { Prisma, Sex } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { OutboxService, HEALTH_ADHERENCE_LOGGED, HEALTH_OBSERVATION_INGESTED } from '../outbox/outbox.service';
 import { ReferenceRangeService } from './reference-range.service';
 import { extractFhirBundle, validateFhirBundle } from './fhir';
@@ -39,6 +40,7 @@ export class HealthIngestionService {
     private readonly idempotency: IdempotencyService,
     private readonly outbox: OutboxService,
     private readonly ranges: ReferenceRangeService,
+    private readonly metrics: MetricsService,
   ) {}
 
   // ── FHIR bundle ────────────────────────────────────────────────────────────
@@ -130,6 +132,9 @@ export class HealthIngestionService {
           return { observations: obs.count, clinicalEvents: ev.count };
         });
 
+        for (const o of extracted.observations) {
+          this.metrics.healthObservationsIngested.inc({ category: o.category, source: 'fhir' });
+        }
         return {
           accepted: result.observations + result.clinicalEvents,
           observations: result.observations,
@@ -188,6 +193,10 @@ export class HealthIngestionService {
           return created;
         });
         this.logger.debug(`ingested observation ${result.id} (${result.code}) for ${caller.id}`);
+        this.metrics.healthObservationsIngested.inc({
+          category: result.category,
+          source: result.deviceId ? 'device' : 'manual',
+        });
         return { accepted: 1, observations: 1, clinicalEvents: 0, patientId: caller.id };
       },
     });
@@ -224,6 +233,7 @@ export class HealthIngestionService {
           });
           return row;
         });
+        this.metrics.healthAdherenceEvents.inc({ type: created.type });
         return { accepted: 1, observations: 0, clinicalEvents: 0, patientId: caller.id };
       },
     });

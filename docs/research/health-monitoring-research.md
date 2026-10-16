@@ -348,3 +348,29 @@ Consequently `apps/api/package.json` gains no new entries except the
 19. Redis — cache-aside. https://redis.io/docs/latest/develop/use-cases/cache-aside/
 20. Brandur Leach (Stripe) — "Implementing Stripe-like Idempotency Keys in Postgres". https://brandur.org/idempotency-keys
 21. Shopify Engineering — "Deconstructing the Monolith". https://shopify.engineering/deconstructing-monolith-designing-software-maximizes-developer-productivity
+
+## 12. Outcome (as built)
+
+This memo was the plan; the feature now exists and every decision above is
+realized in code, with the measurements and adversarial proofs to back it:
+
+- **§10 (no new runtime deps)** held: the only `package.json` additions are the
+  `prisma:seed-health` and `perf:seed-health` scripts; no FHIR SDK was added.
+- **§1–2** (FHIR subset, LOINC/UCUM) are the shapes `apps/api/src/clinical/fhir.ts`
+  validates and extracts, and the codes the synthetic bundle carries.
+- **§3** (range by sex/age) is `ReferenceRangeService.resolve`, a single SQL
+  statement that lets the database pick the most specific row; proved by
+  `scripts/test-health-reference-range-demographics.sh` (an infant and an adult
+  resolve different bands for the same value).
+- **§6** (append-only) is the `clinical_reject_mutation()` trigger + `REVOKE`;
+  proved by `scripts/test-health-data.sh` and `test-health-immutability.sh`.
+- **§7** (derivation over storage) is `TrendService` / `AdherenceService`,
+  measured at ~8 ms p95 from 1k–500k stored observations
+  (`docs/performance/health-monitoring.md`).
+- **§8** (idempotency + outbox reuse) is the shared `IdempotencyService` and
+  `OutboxService`, proved by `scripts/test-health-idempotency.sh` (100 concurrent
+  duplicates → one row) and the out-of-order test.
+
+The full evidence trail is `docs/performance/health-monitoring.md`,
+`docs/performance/optimization-log.md`, and the Phase 5 adversarial suite
+(`scripts/herdr-health-suite.sh`, 6/6).

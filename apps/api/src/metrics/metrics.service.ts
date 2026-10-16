@@ -158,6 +158,53 @@ export class MetricsService implements OnModuleInit {
     registers: [this.registry],
   });
 
+  // ── Health monitoring ─────────────────────────────────────────────────
+  readonly healthObservationsIngested = new Counter({
+    name: 'tangerine_health_observations_ingested_total',
+    help: 'Health observations accepted for ingestion, by category and source',
+    labelNames: ['category', 'source'],
+    registers: [this.registry],
+  });
+
+  readonly healthAdherenceEvents = new Counter({
+    name: 'tangerine_health_adherence_events_total',
+    help: 'Adherence events ingested, by type',
+    labelNames: ['type'],
+    registers: [this.registry],
+  });
+
+  readonly healthRangeAlerts = new Counter({
+    name: 'tangerine_health_range_alerts_total',
+    help: 'Out-of-range alerts raised by the derivation worker, by code and status',
+    labelNames: ['code', 'status'],
+    registers: [this.registry],
+  });
+
+  readonly healthQueueJobs = new Gauge({
+    name: 'tangerine_health_queue_jobs',
+    help: 'Health queue jobs by state',
+    labelNames: ['state'],
+    registers: [this.registry],
+  });
+
+  readonly healthOutboxBacklog = new Gauge({
+    name: 'tangerine_health_outbox_backlog',
+    help: 'Health outbox events accepted but not yet processed (relay + worker backlog)',
+    registers: [this.registry],
+  });
+
+  readonly healthObservations = new Gauge({
+    name: 'tangerine_health_observations',
+    help: 'Total stored observations',
+    registers: [this.registry],
+  });
+
+  readonly healthPatients = new Gauge({
+    name: 'tangerine_health_patients',
+    help: 'Patients with a profile',
+    registers: [this.registry],
+  });
+
   onModuleInit(): void {
     collectDefaultMetrics({ register: this.registry, prefix: 'tangerine_' });
   }

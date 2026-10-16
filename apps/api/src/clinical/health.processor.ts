@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { TrendService } from './trend.service';
 import { OutboxService, HEALTH_ADHERENCE_LOGGED, HEALTH_OBSERVATION_INGESTED, HEALTH_RANGE_ALERT } from '../outbox/outbox.service';
 import { HEALTH_QUEUE } from '../queue/queue.module';
@@ -36,6 +37,7 @@ export class HealthProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly trends: TrendService,
     private readonly outbox: OutboxService,
+    private readonly metrics: MetricsService,
   ) {
     super();
   }
@@ -80,6 +82,7 @@ export class HealthProcessor extends WorkerHost {
           effectiveAt: trend.latestAt.toISOString(),
         }),
       );
+      this.metrics.healthRangeAlerts.inc({ code, status: trend.rangeStatus });
     }
   }
 

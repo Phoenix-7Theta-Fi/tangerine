@@ -224,6 +224,37 @@ choices:
 - **Outbox status enum** with a partial index on `(status, availableAt)` so
   the relay's poll is cheap and failed events are queryable.
 
+### Health monitoring data model
+
+Clinical data is **append-only and derived-on-read** — the opposite of the
+denormalized-counter approach above, and for the same reason: the record of what
+happened is the source of truth, and everything else can be recomputed.
+
+- **`Observation`, `ClinicalEvent`, `AdherenceEvent` are append-only.** A
+  migration installs a `BEFORE UPDATE/DELETE` trigger *and* `REVOKE`s the
+  privilege, so the database itself refuses to rewrite history; a correction is a
+  new row. (Proved by `scripts/test-health-immutability.sh`.)
+- **Nothing derived is stored.** Trends and adherence rates are computed on read.
+  The trend query is a bounded backward walk of `(patientId, code, effectiveAt)`,
+  so its cost is independent of the patient's history — measured flat at ~8 ms
+  p95 from 1k to 500k stored observations.
+- **`ReferenceRange` is a catalog resolved by predicate, not a foreign key.**
+  Rows carry `(code, valueUnit, sex?, ageMinDays?, ageMaxDays?, effective
+  window)`, and one query — `ORDER BY specificity … LIMIT 1` — lets the database
+  pick the winner: sex-specific beats wildcard, then the narrowest age band.
+  Demographics are evaluated *at the observation time*, so pediatric and adult
+  ranges coexist for one code (HR 150/min is normal for an infant, high for an
+  adult).
+- **Logical keys, not cascades.** `AdherenceEvent.protocolItemKey` points at a
+  `ProtocolItem.key` without a foreign key, so retiring a schedule never deletes
+  history. "Not logged" (no row) and "missed" (an explicit skip) are reported
+  separately and never conflated.
+- **Ingestion reuses the outbox.** A write commits its observation and an outbox
+  event in one transaction; the event relays to a dedicated `health` queue, and a
+  `HealthProcessor` derives the trend and can raise a range alert through the
+  same outbox. Exactly-once is the shared `IdempotencyService`, so 100 concurrent
+  duplicates collapse to one row.
+
 ---
 
 ## 4. Scaling boundaries — what breaks first
@@ -245,6 +276,11 @@ Honest list, useful for the benchmarks:
    throughput; find the saturation point.
 7. **Socket.IO Redis adapter overhead.** Cross-instance delivery cost; find
    the scale where it matters.
+8. **Health derivation worker.** Measured: the API accepts ~137 observation
+   writes/s but the single `HealthProcessor` drains ~100 events/s (it derives a
+   trend per observation), so sustained ingestion above that grows the outbox
+   backlog. The lever is consumer concurrency (BullMQ `Worker` concurrency), a
+   deployment knob — see `docs/performance/optimization-log.md`.
 
 Each of these is an open investigation in `Feature List.md` Part 3, not a
 known bug — they are hypotheses to be measured.

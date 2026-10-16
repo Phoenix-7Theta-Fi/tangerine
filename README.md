@@ -222,6 +222,34 @@ Behavioral proof (`docs/performance/marketplace.md`): the inventory race, the
 cart conflict, all 192 order-transition triples, and forcing each saga step to
 fail (asserting the exact compensation set).
 
+### Health monitoring — derivation over storage, exactly-once ingestion
+
+- **Nothing derived is stored.** Trends (latest, lookback, delta, direction,
+  range status) and adherence rates are computed on read from the append-only
+  `Observation` / `AdherenceEvent` stores. The trend read is a bounded backward
+  walk of `(patientId, code, effectiveAt)`, so it stays **~8 ms p95 from 1k to
+  500k** stored observations — no rollup tables.
+- **The store is immutable.** A `BEFORE UPDATE/DELETE` trigger (plus `REVOKE`)
+  makes history unwritable: a correction is a new row, never an edit.
+- **Reference ranges follow demographics.** The database picks the most specific
+  `(sex, age band)` row for the patient *at the time of the observation*, so an
+  infant and a 40-year-old resolve different ranges for the same value (HR
+  150/min is normal for an infant, high for an adult).
+- **Ingestion is exactly-once and atomic.** Each write claims an idempotency key
+  and commits its row plus an outbox event in one transaction; a dedicated
+  `HealthProcessor` consumes the event and raises range alerts through the same
+  outbox. Duplicate keys collapse to one row; out-of-order arrivals still derive
+  the correct latest value.
+- **Not-logged ≠ missed.** A day with no row is *unknown*; an explicit
+  `MEDICATION_SKIPPED` row is *missed*. The adherence derivation reports them
+  separately and never conflates them.
+
+Behavioral proof: `docs/performance/health-monitoring.md` (ingestion throughput,
+trend scaling, the `O(items × events) → linear` adherence optimization) and the
+Phase 5 adversarial suite (`scripts/herdr-health-suite.sh`) — immutability,
+out-of-order arrival, pediatric-vs-adult ranges, partial-logging adherence, and
+referential integrity across the 100-patient population.
+
 ### Backend craft
 
 - Modular monolith with clear boundaries (`users`, `follow`, `posts`, `feed`,
@@ -250,8 +278,9 @@ Full, interactive docs at `http://localhost:3001/docs`.
 | Ledger  | `POST/GET /ledger/transactions`, `GET /ledger/accounts/:accountId/balance`, `GET /ledger/verify` |
 | Webhooks | `POST /webhooks/stripe` (signature-verified, `stripe-signature` header; no `x-user-id`) |
 | Marketplace | `GET/POST /marketplace/products`, `POST /marketplace/inventory/:productId/reserve`, `POST /marketplace/inventory/:productId/release`, `GET /marketplace/cart`, `POST /marketplace/cart/items`, `POST /marketplace/orders`, `GET /marketplace/orders/:id`, `POST /marketplace/orders/:id/transition` |
-| Sagas   | `POST /sagas/checkout`, `GET /sagas`, `GET /sagas/:id` |
-| Ops     | `GET /metrics` (Prometheus: outbox lag, queue depth, booking outcomes, ledger/webhook/saga/inventory/order counters, Node runtime), `GET /health`        |
+| Sagas   | `POST /sagas/checkout`, `GET /sagas`, `GET /sagas/:id`                     |
+| Clinical | `POST /clinical/ingest/fhir`, `POST /clinical/observations`, `POST /clinical/adherence-events` (all exactly-once via `idempotency-key`, `202`), `GET /clinical/trends`, `GET /clinical/protocols`, `GET /clinical/protocols/:id/progress`, `GET /clinical/adherence`, `GET /clinical/observations/:id/range` |
+| Ops     | `GET /metrics` (Prometheus: outbox lag, queue depth, booking outcomes, ledger/webhook/saga/inventory/order counters, health ingestion/alerts/backlog, Node runtime), `GET /health`        |
 
 ### Socket events
 
@@ -271,6 +300,20 @@ User ─┬─< Post ─┬─< Like
       ├─< Follow (follower/following)
       ├─< ConversationMember >─ Conversation ─< Message
       └─< Message
+```
+
+Health data hangs off the same `User` (the patient). The append-only stores
+reference each other by *logical* keys, not foreign keys, so retiring a schedule
+never deletes history; reference ranges are resolved from `(code, unit, sex, age
+band)`, not linked:
+
+```
+User (patient) ─┬─< PatientProfile        (mrn, sex, birthDate)
+                ├─< Observation           (append-only · patientId, code, effectiveAt)
+                ├─< ClinicalEvent         (append-only · condition/encounter/…)
+                ├─< AdherenceEvent        (append-only · protocolItemKey)
+                └─< Protocol ─< ProtocolItem / ProtocolMilestone
+ReferenceRange   (code, valueUnit, sex?, ageMinDays?, ageMaxDays?) → resolved by demographics
 ```
 
 ## Testing
@@ -309,6 +352,20 @@ without `SAGA_FAILURE_INJECTION=1` (the injection flag is reported by
 `GET /api/health`). The individual harnesses are indexed in
 `docs/performance/payments.md` and `docs/performance/marketplace.md`.
 
+The health feature has its own adversarial suite:
+
+```bash
+pnpm --filter @tangerine/api prisma:seed-health    # 100-patient population
+pnpm --filter @tangerine/api start:dev &
+bash scripts/herdr-health-suite.sh                 # 6 adversarial workloads; 6/6 green
+```
+
+It proves the immutability of the observation store, out-of-order derivation,
+that reference ranges follow demographics (infant vs adult), that partial
+logging and skipped days are reported apart, and referential integrity across
+the population. Each workload uses uniquely-named patients, so it never depends
+on or disturbs the seed.
+
 ## Performance program
 
 This project's deliverable is evidence, not features. `docs/performance/`
@@ -324,6 +381,9 @@ contains the methodology, machine spec, and one write-up per measured scenario
   writes with crash recovery, webhook replay and order-independence.
 - **Marketplace scenarios**: inventory race (100 vs 10 units), cart conflict,
   exhaustive order-state transitions, checkout-saga compensation.
+- **Health scenarios**: observation ingestion throughput (137 req/s, 0 `5xx`),
+  FHIR bundle ingestion, concurrent sources, trend-query scaling (flat ~8 ms p95
+  to 500k rows), and adherence-rate scaling with an optimization.
 - **Existing-system scenario**: warm feed read throughput.
 
 ```bash
@@ -356,6 +416,7 @@ tangerine/
 │  │  │  ├─ webhooks/      # signature verify, inbox dedup, payment state machine
 │  │  │  ├─ marketplace/   # products, inventory, cart, orders
 │  │  │  ├─ saga/          # checkout orchestration + LIFO compensations
+│  │  │  ├─ clinical/      # FHIR ingestion, trends, ranges, adherence, health worker
 │  │  │  ├─ metrics/       # Prometheus registry + HTTP instrumentation
 │  │  │  ├─ posts/ users/ follow/
 │  │  │  ├─ chat/          # service, gateway, REST
