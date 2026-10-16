@@ -403,7 +403,7 @@ Update the status marker. Commit the adversarial test scripts and Herdr orchestr
 
 ## Phase 6: Integration and Documentation
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-16T05:56:57Z — 84ab727`
 
 ### Dependencies
 
@@ -453,7 +453,7 @@ Update the status marker. Commit the integration, documentation, and final verif
 | 3 — Ingestion Pipeline | `DONE` | `ee30445` | `2026-10-16T05:21:40Z` |
 | 4 — Benchmarking | `DONE` | `684191b` | `2026-10-16T05:41:23Z` |
 | 5 — Adversarial Testing | `DONE` | `511dc9c` | `2026-10-16T05:45:32Z` |
-| 6 — Integration & Documentation | `NOT STARTED` | | |
+| 6 — Integration & Documentation | `DONE` | `84ab727` | `2026-10-16T05:56:57Z` |
 
 ---
 
