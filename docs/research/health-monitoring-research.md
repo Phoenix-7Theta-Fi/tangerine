@@ -248,12 +248,13 @@ in-repo precedents (`apps/api/src/redis/redis.service.ts`; schema comment at
 `LedgerTransaction`).
 
 **Adherence semantics** (the "not logged" vs "missed" distinction): a *missed*
-occurrence is one the patient explicitly logged as skipped; a *not-logged*
-occurrence is one with no event at all. Adherence rate = taken / (taken +
-missed) over logged occurrences; logging rate = (taken + missed) / expected over
-all expected occurrences. Conflating them would either punish a patient for a
-gap in their app or hide a real gap; keeping them separate is the requirement in
-Phase 2/5.
+occurrence is one the patient explicitly logged as skipped (a
+`MEDICATION_SKIPPED` row); a *not-logged* occurrence is one with no row at all
+(`notLogged = expected − taken − missed`). The adherence rate is `taken /
+expected` over the window, and both `missed` and `notLogged` are reported
+alongside it, so a gap in the app is never silently treated as non-adherence and
+a real skip is never hidden inside a logging gap. Keeping them separate is the
+requirement in Phase 2/5.
 
 ---
 

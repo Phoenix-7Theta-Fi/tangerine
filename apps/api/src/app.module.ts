@@ -21,6 +21,7 @@ import { MarketplaceModule } from './marketplace/marketplace.module';
 import { SagaModule } from './saga/saga.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
+import { ClinicalModule } from './clinical/clinical.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { HealthModule } from './health/health.module';
     SagaModule,
     MetricsModule,
     HealthModule,
+    ClinicalModule,
   ],
 })
 export class AppModule {}

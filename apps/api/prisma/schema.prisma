@@ -107,6 +107,8 @@ model User {
   patientProfile PatientProfile?
   clinicalEvents ClinicalEvent[] @relation("patientClinicalEvents")
   observations   Observation[]   @relation("patientObservations")
+  protocols      Protocol[]      @relation("patientProtocols")
+  adherence      AdherenceEvent[] @relation("patientAdherenceEvents")
 
   @@index([isCelebrity])
 }
@@ -865,4 +867,116 @@ model ReferenceRange {
 
   @@index([code, effectiveFrom])
   @@index([code, sex, ageMinDays, ageMaxDays])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Health monitoring — Phase 2: adherence store and protocol schedule.
+//
+//   * Protocol          — a care plan for a patient (e.g. "T2D 90-day plan").
+//   * ProtocolItem      — an expected recurring behaviour (take metformin,
+//                         log a walk) with its expected frequency.
+//   * ProtocolMilestone — a phase-gated checkpoint with a required cumulative
+//                         count of logged events.
+//   * AdherenceEvent    — an observed adherence action. Append-only.
+//
+// "Not logged" vs "missed" is a data distinction, not a derived one: a day with
+// no row is *not logged*; an explicit MEDICATION_SKIPPED row is *missed*. The
+// derivation layer keeps them apart.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum AdherenceEventType {
+  MEDICATION_TAKEN
+  MEDICATION_SKIPPED
+  EXERCISE_LOGGED
+  MEAL_LOGGED
+  SLEEP_LOGGED
+}
+
+enum ProtocolStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+}
+
+enum ProtocolFrequency {
+  DAILY
+  TWICE_DAILY
+  WEEKLY
+  AS_NEEDED
+}
+
+model Protocol {
+  id            String         @id @default(cuid())
+  patientId     String
+  name          String
+  conditionCode String?
+  status        ProtocolStatus @default(ACTIVE)
+  startAt       DateTime
+  endAt         DateTime?
+  createdAt     DateTime       @default(now())
+
+  patient    User                @relation("patientProtocols", fields: [patientId], references: [id], onDelete: Cascade)
+  items      ProtocolItem[]
+  milestones ProtocolMilestone[]
+
+  @@index([patientId, status])
+}
+
+model ProtocolItem {
+  id             String             @id @default(cuid())
+  protocolId     String
+  /// Stable key shared with AdherenceEvent.protocolItemKey.
+  key            String
+  name           String
+  adherenceType  AdherenceEventType
+  frequency      ProtocolFrequency
+  /// Expected logged events per day (the denominator of the adherence rate).
+  expectedPerDay Float
+  phase          String
+  active         Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+
+  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  @@unique([protocolId, key])
+  @@index([protocolId])
+}
+
+model ProtocolMilestone {
+  id                      String   @id @default(cuid())
+  protocolId              String
+  orderIndex              Int
+  name                    String
+  phase                   String
+  dueAt                   DateTime
+  /// Cumulative logged events required to consider the milestone met.
+  requiredCumulativeTaken Int
+  createdAt               DateTime @default(now())
+
+  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  @@unique([protocolId, orderIndex])
+  @@index([protocolId, dueAt])
+}
+
+/// An adherence action. Append-only (trigger + revoke in the migration).
+model AdherenceEvent {
+  id              String             @id @default(cuid())
+  patientId       String
+  type            AdherenceEventType
+  /// Logical link to ProtocolItem.key (no FK: items can be retired, history stays).
+  protocolItemKey String
+  occurredAt      DateTime
+  valueNumeric    Float?
+  note            String?
+  dataSource      DataSource         @default(MANUAL)
+  sourceId        String
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+
+  patient User @relation("patientAdherenceEvents", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, sourceId])
+  @@index([patientId, protocolItemKey, occurredAt])
+  @@index([patientId, type, occurredAt])
 }
