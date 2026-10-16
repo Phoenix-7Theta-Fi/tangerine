@@ -216,6 +216,10 @@ async function main() {
     ageMaxDays: r.ageMaxDays,
     lowValue: r.lowValue,
     highValue: r.highValue,
+    // Population ranges are valid historically, not just from seed time: set the
+    // window well before any seeded observation so resolution at
+    // observation-time finds them.
+    effectiveFrom: new Date('2000-01-01T00:00:00Z'),
   }));
   const ranges = await prisma.referenceRange.createMany({ data: rangeRows, skipDuplicates: true });
   console.log(`ReferenceRange: ${ranges.count} inserted (${rangeRows.length - ranges.count} already present)`);
