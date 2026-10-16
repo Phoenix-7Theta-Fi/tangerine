@@ -217,7 +217,7 @@ Update the status marker. Commit the schema, migration, seed script, and behavio
 
 ## Phase 2: Derivation Layer — Trends, Adherence Rates, and Protocol Progress
 
-**Status:** `NOT STARTED`
+**Status:** `DONE — 2026-10-16T05:06:40Z — 646a6c2`
 
 ### Dependencies
 
@@ -449,7 +449,7 @@ Update the status marker. Commit the integration, documentation, and final verif
 |---|---|---|---|
 | 0 — Research & Setup | `DONE` | `c7fde3c` | `2026-10-16T04:56:37Z` |
 | 1 — Data Foundation | `DONE` | `a6d91e4` | `2026-10-16T05:03:41Z` |
-| 2 — Derivation Layer | `NOT STARTED` | | |
+| 2 — Derivation Layer | `DONE` | `646a6c2` | `2026-10-16T05:06:40Z` |
 | 3 — Ingestion Pipeline | `NOT STARTED` | | |
 | 4 — Benchmarking | `NOT STARTED` | | |
 | 5 — Adversarial Testing | `NOT STARTED` | | |
