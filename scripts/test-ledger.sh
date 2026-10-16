@@ -47,7 +47,10 @@ echo "api=$API_URL  db=$PG_CONTAINER  n=$N"
 
 # ── 0. reset (test-only) ─────────────────────────────────────────────────
 if [ "$RESET" = "1" ]; then
-  psql_q 'TRUNCATE "LedgerPosting", "LedgerTransaction";' >/dev/null 2>&1
+  # Reset the idempotency rows too: the ledger endpoint is exactly-once on
+  # (sourceType, sourceId, kind), so leaving them behind would replay the
+  # previous run's cached responses and insert nothing.
+  psql_q 'TRUNCATE "LedgerPosting", "LedgerTransaction", "IdempotencyKey";' >/dev/null 2>&1
   echo "reset ledger tables"
 fi
 

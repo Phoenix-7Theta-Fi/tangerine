@@ -45,8 +45,31 @@ else
   TESTS=("${DEFAULT_TESTS[@]}")
 fi
 
+API_URL="${API_URL:-http://localhost:3001}"
+export API_URL
+
 echo "=== Herdr test suite ==="
-echo "root=$ROOT  results=$RESULTS  workloads=${#TESTS[@]}  parallel=${PARALLEL:-0}"
+echo "root=$ROOT  results=$RESULTS  workloads=${#TESTS[@]}  parallel=${PARALLEL:-0}  api=$API_URL"
+
+# The saga workloads drive the failure-injection paths, which the API only
+# exposes when SAGA_FAILURE_INJECTION=1. Fail fast with instructions rather
+# than letting two workloads silently fail.
+NEEDS_INJECTION=0
+for s in "${TESTS[@]}"; do case "$s" in test-saga-*) NEEDS_INJECTION=1;; esac; done
+if [ "$NEEDS_INJECTION" = "1" ]; then
+  HEALTH="$(curl -fsS "$API_URL/api/health" 2>/dev/null || true)"
+  if [ -z "$HEALTH" ]; then
+    echo "FATAL: no API responding at $API_URL. Start it first, e.g.:" >&2
+    echo "  SAGA_FAILURE_INJECTION=1 pnpm --filter @tangerine/api start:prod" >&2
+    exit 1
+  fi
+  if ! printf '%s' "$HEALTH" | grep -q '"sagaFailureInjection":true'; then
+    echo "FATAL: $API_URL has saga failure injection disabled; test-saga-* require it." >&2
+    echo "Restart the API with SAGA_FAILURE_INJECTION=1, e.g.:" >&2
+    echo "  SAGA_FAILURE_INJECTION=1 pnpm --filter @tangerine/api start:prod" >&2
+    exit 1
+  fi
+fi
 
 in_herdr() { command -v herdr >/dev/null 2>&1 && [ "${HERDR_ENV:-}" = "1" ]; }
 
@@ -67,7 +90,7 @@ run_one_in_tab() { # <script> -> pane id
     | python3 -c 'import sys,json
 d=json.load(sys.stdin)
 r=d.get("result",{})
-print(r.get("pane",{}).get("pane_id") or r.get("tab",{}).get("pane_id") or "")' 2>/dev/null)"
+print(r.get("root_pane",{}).get("pane_id") or r.get("tab",{}).get("pane_id") or "")' 2>/dev/null)"
   [ -n "$pane" ] || return 1
   herdr pane run "$pane" "cd '$ROOT' && bash 'scripts/$s' >'$log' 2>&1; echo \$? > '$log.rc'" >/dev/null 2>&1
   echo "$pane"

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Tangerine API — NestJS (Fastify) + Prisma + Redis: social feed with hybrid fan-out and real-time chat.",
   "scripts": {
+    "prebuild": "prisma generate",
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",

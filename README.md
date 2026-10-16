@@ -296,13 +296,18 @@ ledger writes, 100 duplicate requests, 100 webhook replays, 100 checkouts for 10
 units, forced saga failures at every step.
 
 ```bash
+# Start the API with failure injection enabled (required by the saga workloads),
+# then run the whole suite against it.
+SAGA_FAILURE_INJECTION=1 pnpm --filter @tangerine/api start:prod &
 bash scripts/herdr-test-suite.sh     # all 14 workloads; 14/14 green
 ```
 
 `herdr-test-suite.sh` runs each workload in its own Herdr tab (sequentially —
-they share one database) and sends a completion notification. The individual
-harnesses are indexed in `docs/performance/payments.md` and
-`docs/performance/marketplace.md`.
+they share one database) and sends a completion notification. It fails fast
+with instructions if the API it targets is not reachable or was started
+without `SAGA_FAILURE_INJECTION=1` (the injection flag is reported by
+`GET /api/health`). The individual harnesses are indexed in
+`docs/performance/payments.md` and `docs/performance/marketplace.md`.
 
 ## Performance program
 

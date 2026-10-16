@@ -21,6 +21,9 @@ export class HealthController {
       status: db.status === 'fulfilled' && redis.status === 'fulfilled' ? 'ok' : 'degraded',
       db: db.status === 'fulfilled' ? 'up' : 'down',
       redis: redis.status === 'fulfilled' ? 'up' : 'down',
+      // Lets the behavioral suite assert that this instance can exercise the
+      // saga compensation paths before it runs the saga workloads.
+      sagaFailureInjection: process.env.SAGA_FAILURE_INJECTION === '1',
       timestamp: new Date().toISOString(),
     };
   }
