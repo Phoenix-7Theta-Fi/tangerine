@@ -102,6 +102,12 @@ model User {
   cart                   Cart?
   orders                 Order[]              @relation("memberOrders")
 
+  // Health monitoring (Phase 1). A patient is a User; PatientProfile carries the
+  // demographics (sex, birth date) needed to resolve age/sex-specific ranges.
+  patientProfile PatientProfile?
+  clinicalEvents ClinicalEvent[] @relation("patientClinicalEvents")
+  observations   Observation[]   @relation("patientObservations")
+
   @@index([isCelebrity])
 }
 
@@ -699,4 +705,164 @@ model SagaState {
 
   @@index([sagaType, status])
   @@index([status, updatedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Health monitoring — Phase 1: clinical events, observations, reference ranges.
+//
+// Three append-only-ish stores plus a demographic profile:
+//   * PatientProfile  — who the patient is (sex, birth date). Needed to resolve
+//                       age/sex-specific reference ranges; the observation and
+//                       event rows deliberately do NOT denormalize it.
+//   * ClinicalEvent   — discrete clinical history: conditions, encounters,
+//                       procedures, medication orders. Append-only (Phase 1
+//                       migration installs UPDATE/DELETE-rejecting triggers).
+//   * Observation     — time-series measurements (vitals, labs, activity, …).
+//                       Append-only, same enforcement.
+//   * ReferenceRange  — the catalog the derivation layer resolves values
+//                       against. Keyed by code + demographics + effective time.
+//
+// `sourceId` is the originating system's id (e.g. the FHIR resource id) and,
+// with patientId, makes ingestion and re-seeding idempotent.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum Sex {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+enum ObservationCategory {
+  VITAL_SIGNS
+  LABORATORY
+  ACTIVITY
+  SLEEP
+  NUTRITION
+  SOCIAL_HISTORY
+  EXAM
+  DEVICE
+}
+
+enum ClinicalEventType {
+  CONDITION
+  ENCOUNTER
+  PROCEDURE
+  MEDICATION_ORDER
+  IMMUNIZATION
+  ALLERGY
+}
+
+/// Provenance of a clinical event or observation.
+enum DataSource {
+  MANUAL
+  DEVICE
+  FHIR_IMPORT
+  LAB_FEED
+  SEED
+}
+
+/// Demographic context for a patient. One per patient User.
+model PatientProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  /// Medical record number — the join key used by importers (§ FHIR identifier).
+  mrn       String   @unique
+  sex       Sex      @default(UNKNOWN)
+  birthDate DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([birthDate])
+}
+
+/// A discrete clinical event. Append-only: history is the record, and the
+/// migration rejects UPDATE/DELETE at the trigger level.
+model ClinicalEvent {
+  id          String            @id @default(cuid())
+  patientId   String
+  type        ClinicalEventType
+  code        String
+  codeSystem  String
+  display     String
+  status      String?
+  /// Clinical onset / encounter start / procedure time / order authoring time.
+  onsetAt     DateTime?
+  endedAt     DateTime?
+  recordedAt  DateTime          @default(now())
+  dataSource  DataSource        @default(SEED)
+  /// Source-system id (FHIR resource id). Unique per patient -> idempotency.
+  sourceId    String
+  /// Logical link to a sibling Encounter event (no FK: encounters live here too).
+  encounterId String?
+  payload     Json?
+  createdAt   DateTime          @default(now())
+
+  patient User @relation("patientClinicalEvents", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, sourceId])
+  @@index([patientId, type, onsetAt])
+  @@index([patientId, code, onsetAt])
+  @@index([code, onsetAt])
+}
+
+/// A time-series measurement. Append-only.
+model Observation {
+  id           String              @id @default(cuid())
+  patientId    String
+  category     ObservationCategory
+  code         String
+  codeSystem   String              @default("http://loinc.org")
+  display      String
+  /// Numeric value for quantitative observations (the common case).
+  valueNumeric Float?
+  /// Non-numeric value (e.g. a coded result) when valueNumeric is null.
+  valueString  String?
+  valueCode    String?
+  valueUnit    String?
+  /// When the measurement applies (FHIR effective[x]); the trend axis.
+  effectiveAt  DateTime
+  /// When it entered the record (FHIR issued). May lag effectiveAt.
+  issuedAt     DateTime?
+  dataSource   DataSource          @default(SEED)
+  sourceId     String
+  deviceId     String?
+  encounterId  String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+
+  patient User @relation("patientObservations", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, sourceId])
+  /// The trend query: one patient, one code, ordered/range-scanned by time.
+  @@index([patientId, code, effectiveAt])
+  @@index([patientId, category, effectiveAt])
+  @@index([code, effectiveAt])
+  /// BRIN suits an append-ordered time column on a large, immutable table.
+  @@index([effectiveAt], type: Brin)
+}
+
+/// Reference range catalog: "for this code, in this unit, for this sex/age
+/// band, valid during this window, the normal range is [low, high]".
+/// `sex`/age bounds are nullable; null means "applies to any".
+model ReferenceRange {
+  id            String    @id @default(cuid())
+  code          String
+  codeSystem    String    @default("http://loinc.org")
+  display       String
+  valueUnit     String
+  sex           Sex?
+  ageMinDays    Int?
+  ageMaxDays    Int?
+  lowValue      Float?
+  highValue     Float?
+  lowCritical   Float?
+  highCritical  Float?
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([code, effectiveFrom])
+  @@index([code, sex, ageMinDays, ageMaxDays])
 }

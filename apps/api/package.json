@@ -16,6 +16,7 @@
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
     "synthetic:health": "node prisma/synthetic/generate-health-seed.mjs",
+    "prisma:seed-health": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-health.ts",
     "perf:seed-bookings": "ts-node --project performance/tsconfig.json performance/seed-bookings.ts",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand --forceExit"
